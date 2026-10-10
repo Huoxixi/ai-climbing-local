@@ -184,7 +184,7 @@ internal static class SetupCleanup {
             }
         }
         if(Directory.Exists(cache)) {
-            AssertTree(cache,Path.Combine(WindowsApp.LocalRoot,"ClimbSetup"));
+            AssertTree(cache,Path.Combine(WindowsApp.LocalRoot,"ClimbingSetup"));
             Directory.Delete(cache,true);
         }
     }
