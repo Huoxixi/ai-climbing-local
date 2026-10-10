@@ -1,271 +1,82 @@
-# 攀岩助手 · 本地抱石 App
+# 攀岩助手
 
-一个在自己电脑上运行的抱石照片选线与视频复盘工具。用照片保存自己的线路，用视频观察骨架、二维估算重心与基础身体数据，并导出复盘视频或「视频＋全部资料」。
+在自己的电脑上整理抱石线路、回看攀爬过程。支持照片选线、视频骨架与基础统计，以及复盘视频和资料导出。
 
-**当前公开版本：`0.1.17-local.20261010` Windows 在线安装版，功能来自本地 App `0.1.14-replay.20261009`。** 原始提交基线与导出范围见 [SOURCE_SNAPSHOT.json](SOURCE_SNAPSHOT.json)。本地版关闭云端收费 API，不需要填写外部服务密钥。
+**[下载 Windows 安装包](https://github.com/Huoxixi/climbing-assistant-local/releases/latest)** · Windows 10/11 64 位 · 当前版本 `0.1.17-local.20261010`
 
-**普通用户下载 Windows 安装包，解压后双击「安装攀岩助手.exe」即可。** 点击「开始安装」，自动准备环境、岩点模型和骨架模型；完成后从桌面打开。无需安装 Python、Node.js、编译工具或填写命令。首次安装需要网络，以后识别在本机运行。源码和预构建界面包同时保留，供开发者使用。
+## 安装与开始使用
 
-## 目录
+1. 下载发布页中的 **ClimbingAssistant-Windows-0.1.17-local.20261010.zip**，右键「全部解压」。
+2. 双击 **安装攀岩助手.exe**，点击「开始安装」。同目录的 **安装说明.txt** 可随时查看。
+3. 完成后点击「打开攀岩助手」，以后从桌面的「攀岩助手（公开版）」打开。
 
-- [当前功能](#当前功能)
-- [下载、安装与启动](#下载安装与启动)
-- [使用步骤](#使用步骤)
-- [项目架构](#项目架构)
-- [开源依赖、引用与原创部分](#开源依赖引用与原创部分)
-- [目前能做到的程度](#目前能做到的程度)
-- [数据、隐私和安全](#数据隐私和安全)
-- [开发与验证](#开发与验证)
-- [常见问题](#常见问题)
-- [后续方向与参与](#后续方向与参与)
-- [许可证](#许可证)
+首次安装需要联网，运行环境和识别模型自动准备，无需自己安装 Python 或配置命令。之后照片、视频识别在本机进行，不需要外部服务密钥。
 
-## 当前功能
+下载约 **56 MiB**；安装过程约需 **2.5 GiB** 空间，完成后约 **1.53 GiB**，不含个人照片和视频。缺少微软 WebView2 时，安装器会自动准备，需额外空间。
 
-| 功能 | 当前行为 | 使用条件 |
-| --- | --- | --- |
-| 照片选线 | 上传照片 → 整图识别候选岩点 → 自己逐点选线 → 复核保存 | 需专项岩点模型和 Detectron2 |
-| 岩点编辑 | 补点、删点、单帧精修、画线圈选与确认轮廓 | 识别与模型辅助精修需要岩点模型 |
-| 线路库 | 保存个人照片线路卡片，查看历史线路与进度 | 数据存放在当前电脑 |
-| 视频准备 | 从画面取色、识别和复核岩点，或选择「只生成骨架」 | 岩点可选；纯骨架不依赖专项岩点模型 |
-| 本地骨架 | RTMW-L 全身关键点、人物跟踪、墙面配准 | 需 RTMW 和 YOLOX 模型，支持 CPU；Windows 可用 DirectML |
-| 同尺度双画面 | 左侧原视频，右侧骨架、当前岩点与随播放累积的估算重心路线 | 缺测和配准失败留空；回拖不展示未来轨迹 |
-| 基础统计 | 时间、关节角度、躯干倾角、姿态停留和二维估算重心等 | 基于本地识别结果；不是专业准确率承诺 |
-| 岩点使用显示 | 根据有证据的使用记录标亮；最后一帧显示有有效使用记录的全部岩点 | 纯骨架模式不计算或展示岩点接触统计 |
-| 视频导出 | 复盘视频 / 视频＋全部资料；保留范围与速度选择 | 安装器自动准备视频组件；新导出另存 |
-| 资料导出 | 随视频导出结构化分析资料、证据及分析约束，供自行查看、检查和分析 | App 不向外部发送资料 |
-| 文件存储 | 桌面窗口可选择空文件夹，下次启动复制资料并切换，保留原资料 | 配置位置不迁移；浏览器模式不提供原生文件夹选择 |
-| 本地账号 | 单机 owner 身份、设置中的账号与退出入口 | 不提供多人账号隔离或公网登录服务 |
+安装中可以停止或取消。失败、停止或取消会清理**本次新装的程序、环境、模型和缓存**，保留已有应用与个人资料。若文件被占用，按提示点击「继续清理」；清理完成后可重新安装。
 
-旧生产系统的定线工作区、仿真审核、实验室与服务器发布工具不属于本仓库。源码保留了一些历史分析兼容模块，但当前界面和后端入口没有开放云端评语、专业动作点评、同线路比较或动作修正产品流程。
+## 能做什么
 
-## 下载、安装与启动
+| 功能 | 使用方式 |
+| --- | --- |
+| 照片选线 | 上传岩壁照片 → 识别候选岩点 → 自己选线、补删和精修 → 保存到线路库 |
+| 视频复盘 | 选择视频 → 从画面取色、识别并确认岩点，或选择「只生成骨架」 → 开始分析 |
+| 观察动作 | 左侧原视频，右侧骨架、岩点使用记录和二维估算重心路线；查看时间、关节角度、身体倾斜和姿态停留等统计 |
+| 保存与导出 | 回看历史记录，导出复盘视频或「视频＋全部资料」，支持选择范围和速度；原视频保留 |
+| 文件存储 | 在桌面版设置中选择空文件夹，下次启动复制资料并切换，保留原文件 |
 
-### 普通用户：三个步骤
-
-1. 打开 [最新发布页](https://github.com/Huoxixi/climbing-assistant-local/releases/latest)，下载 **`ClimbingAssistant-Windows-0.1.17-local.20261010.zip`**，右键选择「全部解压」。
-2. 打开解压后的文件夹，先看 **安装说明.txt**，双击 **安装攀岩助手.exe**，点击 **开始安装**。窗口显示中文进度；失败会自动清理，按提示处理后点击 **重新安装**。
-3. 完成后点击 **打开攀岩助手**，以后双击桌面上的 **攀岩助手（公开版）**。
-
-发布页也提供单独的安装 EXE，可直接双击安装。`ClimbingAssistant-local-*.zip` 和 GitHub 的「Code → Download ZIP」是开发者源码，解压后的 **安装指引.txt** 会指向普通用户安装包。
-
-适用于 **Windows 10/11 x64**。安装器包含独立 Python、预构建界面和已编译的岩点运行组件；模型从原作者 Kaggle / OpenMMLab 获取并校验，其他依赖从官方软件源安装。缺少 WebView2 时自动下载微软组件并验证数字签名。它是需要联网完成首次准备的完整安装器。
-
-安装 EXE 约 **56 MiB**；程序和模型安装后约 **1.53 GiB**，安装过程含解压与下载缓存约需 **2.5 GiB**。这些数字来自当前 Windows 实测，不含个人照片、视频和复盘结果；缺少 WebView2 时还需微软组件的空间。Windows 通常把 MiB / GiB 显示为 MB / GB，安装窗口为便于阅读取整为 1.6 / 2.5 GB。详情见 [验证记录](docs/VALIDATION.md)。
-
-程序安装在 `%LOCALAPPDATA%\Programs\ClimbingAssistant` 的版本目录；资料在 `%LOCALAPPDATA%\ClimbingAssistantCommunity`，与内部 App 分开。安装成功、失败、停止或取消后都会清理本次缓存。停止后可重新安装；取消会清理后关闭窗口。失败时不留下本次新装的环境、模型或半成品程序，已有版本和个人资料保留。重新安装同版本先检查已有程序。
-
-版本尚未做跨电脑全面验收。安装器暂未取得商业代码签名；系统可能显示未知发布者，应核对本仓库发布页和 SHA-256。不要关闭安全软件。
-
-<details>
-<summary>开发者：源码安装与启动</summary>
-
-### 1. 获取源码
-
-**源码包：** 前往 [Releases](https://github.com/Huoxixi/climbing-assistant-local/releases)，下载 `ClimbingAssistant-local-*.zip`，解压后双击 `install.cmd`，完成后双击 `start.cmd`。源码方式需要 Python，并自行准备 Detectron2；普通用户使用上方安装 EXE。
-
-**开发者：** 在 GitHub 点击 **Code → Download ZIP** 并解压，或：
-
-```powershell
-git clone https://github.com/Huoxixi/climbing-assistant-local.git
-cd climbing-assistant-local
-```
-
-发布页提供同版本源码压缩包及 SHA-256 校验文件。程序源码与个人数据分别保存；不要解压覆盖自己的资料文件夹。
-
-### 2. 安装运行环境
-
-当前主支持平台为 **Windows 10/11 x64**。
-
-- [Python 3.12 x64](https://www.python.org/downloads/windows/)：安装 Python Launcher；自定义 Python 路径也可通过 `setup.ps1 -Python` 指定。
-- [Node.js](https://nodejs.org/en/download/)：仅开发者源码构建需要；22.12+ 的 22.x 或 24+，包含 npm。使用发布页的预构建界面包可跳过。
-- [Microsoft WebView2 Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)：桌面窗口需要；浏览器模式可不依赖它。
-- 首次安装需要联网下载依赖与约 265 MB 的姿态模型，实际下载体积还包括依赖、压缩包和视频编码工具。处理速度及内存占用取决于视频长度、分辨率和电脑配置；尚未给出经过跨机器验收的最低配置。
-
-### 3. 一次安装
-
-双击 `install.cmd`，或在源码目录执行：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
-```
-
-脚本在本目录创建 `.venv`，安装依赖，从 OpenMMLab 官方地址下载并校验 RTMW/YOLOX 模型。发布包的预构建界面通过清单校验后直接使用；只有纯源码下载或 `-RebuildFrontend` 才需要 Node.js 构建。脚本不读取旧开发目录，不复制你的照片或密钥，不请求任何收费分析服务。
-
-自定义 Python：
-
-```powershell
-.\setup.ps1 -Python 'C:\Python312\python.exe'
-```
-
-模型已有或需要稍后自行安装时使用 `-SkipModels`。跳过安装不代表已具备姿态推理能力。
-
-### 4. 启动
-
-双击 `start.cmd` 打开独立桌面窗口。窗口关闭后本次后台服务退出。
-
-也可运行浏览器模式：
-
-```powershell
-.\start.cmd --browser
-```
-
-浏览器模式中关闭网页不会结束后台；在启动终端按 `Ctrl+C` 退出。每次启动使用空闲的本地端口，不占用原项目端口。程序只监听 `127.0.0.1`，以实例凭证保护页面、API 与媒体。
-
-默认资料位置为 `%LOCALAPPDATA%\ClimbingAssistantCommunity`，与内部 App 的资料目录独立；旧版公开资料自动沿用。指定新位置可用：
-
-```powershell
-.\start.cmd --data-root 'D:\MyClimbingData'
-```
-
-### 5. 可选：启用照片岩点识别
-
-请按 [docs/MODELS.md](docs/MODELS.md) 安装 Detectron2 与专项权重。权重缺失时明确报错，不悄悄切换到云端，也不以随机轮廓冒充识别。Windows 的 Detectron2 编译需要额外工具链，本次公开包没有提供已编译的原生扩展。
-
-</details>
-
-## 使用步骤
-
-**先体验纯骨架复盘：** 进入视频复盘 → 选择自己的视频 → 选择「只生成骨架」 → 开始本地分析 → 查看双画面和基础统计 → 导出复盘视频或视频＋全部资料。原视频保留；纯骨架模式不会生成岩点使用率。
-
-**体验带岩点复盘：** 准备好专项模型后，从视频画面取色 → 上传并识别岩点 → 检查、补删和精修 → 确认岩点 → 开始本地分析。也可在识别后放弃岩点，继续生成骨架。
-
-**保存照片线路：** 上传清晰的完整岩壁照片 → 整图识别 → 自选线路成员 → 对漏点和边缘进行精修 → 确认保存。当前默认路线为空，不自动假定所有同色岩点属于同一线路。
-
-## 项目架构
-
-```mermaid
-flowchart LR
-    U[本机桌面窗口 / 浏览器] --> G[回环服务与实例访问保护]
-    G --> V[Vue 3 本地抱石界面]
-    G --> A[FastAPI 本地后端]
-    A --> P[照片任务 / 岩点轮廓与颜色 / 人工复核]
-    A --> R[视频准备 / RTMW / 人物跟踪与配准]
-    R --> S[二维身体数据 / 估算重心 / 基础统计]
-    P --> D[本地 SQLite 与文件存储]
-    S --> D
-    D --> E[双画面渲染 / FFmpeg 导出 / 资料包]
-```
-
-```text
-climbing-assistant-local/
-├── README.md / THIRD_PARTY_NOTICES.md / LICENSE
-├── install.cmd / setup.ps1          首次安装与模型准备
-├── installer/                      中文安装器、运行环境准备、下载校验与原生启动器
-├── start.cmd / run-local.py         同源页面、实例保护和窗口生命周期
-├── SOURCE_SNAPSHOT.json             原始版本与公开范围
-├── frontend/
-│   ├── src/LocalRoot.vue            本地账号与入口
-│   ├── src/LocalApp.vue             照片、线路库、复盘和设置
-│   ├── src/components/              本地工作台、岩点编辑器、播放器
-│   ├── src/services/                API、坐标、播放和数据处理
-│   ├── src/styles/                  界面样式
-│   └── package-lock.json            前端依赖锁定
-├── backend/
-│   ├── boulder_local_app.py         仅本地抱石 API，关闭收费入口
-│   ├── core/photo_*.py              照片任务与专项实例分割适配
-│   ├── core/climb_replay.py         视频任务、保存、恢复与基础处理
-│   ├── core/replay_*.py             姿态、跟踪、统计、兼容、渲染和导出
-│   ├── model_assets/                模型配置与摘要，不含模型权重
-│   ├── vendor/rtmlib/               实际复用的推理辅助代码及原许可证
-│   ├── scripts/install_replay_rtmw.py
-│   └── requirements-local.txt       当前本地运行依赖
-├── desktop/                        访问保护、存储配置与安全辅助
-├── docs/                           模型、架构、验收与使用说明
-└── .github/workflows/ci.yml         公开源码构建与针对性检查
-```
-
-前后端共用当前本地 App 代码。前端仅导出本地入口可达的文件；后端按本地包规则及导入关系收集。安装器通过 `installer/dependencies-win.txt` 固定 Windows 依赖，前端通过 `package-lock.json` 固定。源码安装方式的间接依赖仍由 pip 解析。完整架构说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
-
-## 开源依赖、引用与原创部分
-
-本项目不是从零实现姿态模型或实例分割模型。下面区分**实际复制/修改、运行依赖、外部权重和研究参考**，避免把所有调研过的仓库写成已经集成。
-
-| 来源 | 实际关系 | 许可与说明 |
-| --- | --- | --- |
-| [rtmlib](https://github.com/Tau-J/rtmlib) | 实际保留 RTMPose/YOLOX 预处理与解码子集；BaseTool 改为仅本地 ONNX 适配 | Apache-2.0；原 LICENSE、下载摘要与修改 NOTICE 保留 |
-| [MMPose / RTMW](https://github.com/open-mmlab/mmpose) | 使用官方 RTMW-L 384×288 导出权重；不打包完整 MMPose | 源码 Apache-2.0；权重及训练数据条件需分别查看 |
-| [YOLOX](https://github.com/Megvii-BaseDetection/YOLOX) | OpenMMLab 提供的 YOLOX-S HumanArt 人体检测导出权重 | 源码 Apache-2.0；不把源码许可证直接等同于权重全部使用条件 |
-| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | CPU / Windows DirectML 推理依赖 | MIT |
-| [Detectron2](https://github.com/facebookresearch/detectron2) | 岩点 Mask R-CNN 的推理框架；配置基于其结构 | Apache-2.0；安装 EXE 包含 cp312 CPU 扩展、原许可证、完整对应源码 ZIP 与摘要；用户无需编译 |
-| [Indoor Climbing Gym Hold And Route Segmentation](https://www.kaggle.com/datasets/tomasslama/indoor-climbing-gym-hold-segmentation) / [作者研究仓库](https://github.com/xiaoxiae/Indoor-Climbing-Hold-and-Route-Segmentation) | Tomáš Sláma 的专项岩点分割模型与公开数据来源 | Kaggle 数据元信息 CC BY-SA 4.0，研究源码 GPL-3.0；安装时直接从作者 Kaggle v4 地址获取指定模型并校验，不上传内部权重或提供镜像 |
-| [PyTorch](https://github.com/pytorch/pytorch) / [TorchVision](https://github.com/pytorch/vision) | 专项模型运行依赖 | 原 BSD 通知及各原生组件许可适用；在用户电脑上从官方 CPU wheel 准备，移除不用于运行的静态库及头文件，保留 DLL 和许可证 |
-| [Vue](https://github.com/vuejs/core)、[Vite](https://github.com/vitejs/vite)、[Element Plus](https://github.com/element-plus/element-plus)、[Axios](https://github.com/axios/axios) | 界面与通信依赖 | MIT |
-| [FastAPI](https://github.com/fastapi/fastapi)、[Uvicorn](https://github.com/encode/uvicorn)、[Pydantic](https://github.com/pydantic/pydantic) | API、服务与数据校验依赖 | MIT / BSD-3-Clause / MIT |
-| [pywebview](https://github.com/r0x0r/pywebview) | Windows 独立窗口 | BSD-3-Clause；WebView2 为外部微软组件 |
-| [OpenCV](https://github.com/opencv/opencv)、[NumPy](https://github.com/numpy/numpy)、[Pillow](https://github.com/python-pillow/Pillow) | 视频图像、计算与绘图依赖 | Apache-2.0 / BSD-3-Clause / HPND；原生包另含第三方组件 |
-| [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) / [FFmpeg](https://ffmpeg.org/) | 视频转码与导出；安装器从软件源准备到用户环境 | 包装层 BSD-2-Clause；FFmpeg 具体构建可能是 GPL，不能用包装层许可证覆盖二进制 |
-| [Noto CJK](https://github.com/notofonts/noto-cjk) | 后端中文文字渲染；保留原字体及许可证 | SIL OFL 1.1 |
-| [MiSans](https://hyperos.mi.com/font/en/faq/) | 前端原版字体嵌入 | 小米字体条款；不是由本项目重新授权的自由字体 |
-
-研究阶段还参考过 [vision-demos / rock_climbing](https://github.com/jeremyipark/vision-demos/tree/main/rock_climbing)、[Climbing Analysis Toolbox](https://github.com/tommyjtl/climbing-analysis-toolbox)、[PoseAnalysis](https://github.com/jayv29/pose-analysis-skill)、[Dynalytix](https://github.com/Jolieabadir/dynalytix) 的交互、视频对齐与数据表达思路；本次导出未发现这些仓库的 vendored 源码目录，不据此声称直接复制或已实现它们的全部功能。历史调研中对部分许可有相互冲突记录，因此这里只列研究参考，不作复制授权证明。
-
-本项目主要实现照片/视频任务编排、人工复核工作流、人物跟踪约束与证据保存、坐标对齐、二维估算重心与统计表达、同尺度播放、历史恢复、导出和本地桌面数据隔离。它们建立在上述框架、模型与研究工作之上。完整出处和分发边界见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+只生成骨架时，不计算岩点接触与使用率。照片线路默认由自己逐点选择，不自动把同色岩点当作一条路线。
 
 ## 目前能做到的程度
 
-目前可以用它**整理自己的抱石线路，回看攀爬过程，并把视频和分析资料保存下来**。它已经能完成基础流程，但识别结果仍需要自己检查，暂时不能代替教练判断。
+基础照片选线、视频复盘和导出流程已可使用，但**识别结果需要自己检查**：遮挡、旁人入镜、镜头晃动或身体出画，可能造成漏点、骨架不完整或选错人。速度取决于电脑配置及视频长度、分辨率。
 
-| 你想做的事 | 现在能做到什么 | 使用时需要知道什么 |
-| --- | --- | --- |
-| 从照片保存一条线路 | 找出候选岩点，由你选择线路、修正漏点和边缘，再保存 | 安装器自动准备识别模型；可能认错或漏掉岩点，保存前要确认 |
-| 看清自己怎样移动 | 在视频旁显示身体骨架，辅助观察手脚位置、身体倾斜和姿态变化 | 默认每秒分析约 10 个画面；人物被遮挡、离开画面、旁人入镜或镜头晃动，都可能让结果不完整或认错人 |
-| 观察身体中心的移动 | 根据画面中的身体姿态，估算一个中心点并显示它的移动路线 | 这是平面视频里的估算，不能说明真实的三维重心或手脚用了多大力；身体关键部位看不清时会留空 |
-| 回顾哪些岩点可能用过 | 结合手脚位置和岩点位置，显示可能的接触、停留和使用记录 | 画面中手脚靠近岩点，不一定代表真正抓住或踩稳；纯骨架模式不提供这些记录 |
-| 留下复盘资料 | 查看基础统计，导出复盘视频，或一起导出分析资料，方便之后回看 | 原视频与已有结果保留；导出需要电脑有足够的存储空间 |
+重心路线是二维视频中的估算；手脚靠近岩点也不等于真正抓住或踩稳。不能据此判断真实受力、三维重心、线路难度，或替代教练点评。目前没有云端点评、不同视频的技巧对比或自动定线功能。
 
-**目前还不能做：** 自动判断线路难度、准确识别每一种攀岩技巧、给出教练级动作点评，或根据视频判断真实受力。当前公开版也没有云端点评、不同视频的技巧对比和自动定线仿真功能。
+已在当前 Windows 电脑验证安装、模型运行、桌面打开与视频转换，尚未完成跨电脑、所有显卡和视频格式的全面验证。[详细验证记录](docs/VALIDATION.md)
 
-**安装和兼容性：** Windows 安装器自动准备照片和骨架识别所需环境与模型。目前在开发电脑的独立目录检查安装和基本运行流程，还没有完成不同电脑、显卡和所有视频格式的全面验证。详细检查记录见 [docs/VALIDATION.md](docs/VALIDATION.md)。
+## 资料与常见问题
 
-## 数据、隐私和安全
-
-照片、视频、SQLite 数据库、任务状态和导出留在自己的电脑。首次安装会访问 PyPI、PyTorch、原作者 Kaggle、OpenMMLab，缺窗口组件时访问微软；运行时不再自动下载模型。源码构建还需 npm。当前本地产品不向外部分析服务发送媒体。
-
-本仓库是新建源码快照，不携带旧 Git 历史、个人媒体、生产数据、密钥、服务器地址或访问配置。`.gitignore` 排除模型、虚拟环境、数据库、缓存和运行数据。提交贡献前仍需自己检查暂存内容；忽略规则不是秘密扫描的替代品。
-
-默认数据是单机单用户目录，**不要把服务绑定公网或以它提供多人托管**。实例凭证不代替多租户权限体系。迁移只复制到选择的空目录，保留原文件；卸载源码前先备份资料目录。
-
-## 开发与验证
-
-运行依赖安装完成后：
-
-```powershell
-$env:LOCAL_ONLY='true'
-$env:PYTHON_DOTENV_DISABLED='1'
-$env:PYTHONPATH="$PWD;$PWD\backend"
-.\.venv\Scripts\python.exe -m unittest discover -s backend -p 'test_boulder*.py'
-.\.venv\Scripts\python.exe -m unittest desktop.test_storage desktop.test_package_scope
-cd frontend
-npm run build -- --mode boulder-local
-```
-
-公开 CI 验证 Linux 的源码构建、部分本地数据流程与分发范围，**不测试真实视频识别质量、Windows 原生窗口或专项 Detectron2 扩展**。后端单测使用临时目录与合成数据，不调用收费服务。
-
-如使用 Vite 开发服务，应配置 `LOCAL_ONLY=true`、独立 `PHOTO_ROUTE_DATA_DIR`，启动 `boulder_local_app:app`，并保持本地来源约束。普通使用者直接使用 `start.cmd`，不需要分别启动前后端。
-
-## 常见问题
+照片、视频和复盘记录留在自己的电脑，不发送到外部分析服务。默认资料目录为 `%LOCALAPPDATA%\ClimbingAssistantCommunity`；更新时会沿用旧版公开资料位置。安装联网获取组件与模型，来源包括 PyPI、PyTorch、Kaggle、OpenMMLab 和微软。
 
 | 问题 | 处理方法 |
 | --- | --- |
-| 缺少 Python / npm | 普通用户使用安装 EXE，无需配置；只有源码开发需自行安装 |
-| 安装失败或下载中断 | 本次文件自动清理后点击「重新安装」；「停止安装」清理后留在窗口，「取消安装」清理后退出。文件被占用时点击「继续清理」。日志在窗口内查看、复制，关闭后不另存缓存 |
-| 模型来源不能访问 | 检查网络并稍后重试；若来源要求登录或变更链接，在项目 Issues 反馈，不绕过来源限制 |
-| 照片识别不能运行 | 重新运行同版本安装器进行检查；源码用户另按 MODELS.md 安装 |
-| 骨架不完整或人物选错 | 改善取景、减少旁观者和遮挡；不能用错误骨架推断技术 |
-| 窗口打不开 | 安装 WebView2，或用 `start.cmd --browser` |
-| 导出失败 | 检查可用磁盘、FFmpeg 与原视频；保留旧结果，失败不代表原片被删除 |
-| 设置中不显示外部分析服务 | 当前本地范围已关闭这些接口，属于预期行为 |
-| 更新后历史资料不见了 | 核对 `--data-root` 或默认 Community 目录；内部旧 App 目录不会自动导入 |
+| 安装失败或下载中断 | 按窗口提示检查网络和空间，清理完成后重新安装；「查看日志」可复制具体错误 |
+| 安装时提示未知发布者 | 当前安装器未取得代码签名；请从本仓库发布页下载，发布页提供 SHA-256 校验文件 |
+| 识别不完整或人物选错 | 尽量保持完整取景、减少遮挡和旁观者；保存前复核岩点，检查骨架是否跟随正确的人 |
+| 导出失败 | 检查磁盘空间与原视频是否可读取；失败不会删除已有结果 |
+| 更新后找不到记录 | 检查设置中的资料位置；内部开发版资料不会自动导入 |
 
-## 后续方向与参与
+仅用于本机单人使用。删除或迁移资料前请先备份。问题反馈见 [Issues](https://github.com/Huoxixi/climbing-assistant-local/issues)，附系统版本、操作步骤和错误信息即可，不要上传密钥或完整个人资料目录。
 
-优先事项是更多独立 Windows 电脑验收、视频格式覆盖和独立标注质量验证。当前先提供自动准备环境与模型的在线安装器；完全离线包仍需进一步核实所有外部模型和组件的再分发材料。
+## 项目结构
 
-欢迎通过 [Issues](https://github.com/Huoxixi/climbing-assistant-local/issues) 报告系统版本、运行环境、复现步骤、预期/实际行为和经过脱敏的错误信息。不要上传密钥、含个人身份的媒体或完整资料目录。提交 PR 前阅读 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题见 [SECURITY.md](SECURITY.md)。
+桌面窗口 / 浏览器 → Vue 界面 → FastAPI 本地服务 → 岩点与姿态处理 → 本地存储和视频导出。
 
-## 许可证
+| 目录 | 职责 |
+| --- | --- |
+| `frontend/` | 照片选线、岩点编辑、线路库、复盘播放器和设置 |
+| `backend/` | 任务处理、模型推理、人物跟踪、坐标对齐、基础统计与 FFmpeg 导出 |
+| `desktop/`、`run-local.py` | 本地窗口、访问保护、资料存储与程序生命周期 |
+| `installer/` | 中文安装器、环境与模型准备、下载校验及失败清理 |
+| `docs/` | 开发、模型、架构和验证说明 |
 
-本项目代码采用 **GNU GPL v3.0**，详见 [LICENSE](LICENSE)。保留作者信息和修改说明；分发修改版时按许可证提供相应源码。实际 vendored 第三方代码、字体、外部模型和运行依赖保留各自许可，本项目许可证不能替它们重新授权。
+服务仅监听本机。更详细的 [架构说明](docs/ARCHITECTURE.md)、[源码开发与启动](docs/DEVELOPMENT.md)、[模型说明](docs/MODELS.md)、[安装器重建](docs/INSTALLER.md) 供开发者查阅。源码包 `ClimbingAssistant-local-*.zip` 用于开发，普通用户下载上方 Windows 包。
 
-Git 源码不包含模型、Python 或 FFmpeg 二进制。安装 EXE 含 PSF 许可的独立 Python、pip、Detectron2 原生扩展及其完整对应源码；其他组件与模型在用户电脑上直接获取。各资源保留原始条件，来源作者不为本项目功能或结论背书。详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+## 开源来源与许可证
+
+本项目实现照片与视频工作流、人工复核、跟踪与对齐、统计展示、历史恢复及导出；识别模型和基础框架来自以下项目：
+
+| 来源 | 用途 |
+| --- | --- |
+| [rtmlib](https://github.com/Tau-J/rtmlib) | 实际复用并适配姿态、人体检测的预处理与解码代码，Apache-2.0 |
+| [MMPose / RTMW](https://github.com/open-mmlab/mmpose)、[YOLOX](https://github.com/Megvii-BaseDetection/YOLOX) | 官方姿态和人体检测权重 |
+| [Detectron2](https://github.com/facebookresearch/detectron2)、[Tomáš Sláma 的岩点分割项目](https://github.com/xiaoxiae/Indoor-Climbing-Hold-and-Route-Segmentation)及其 [Kaggle 发布](https://www.kaggle.com/datasets/tomasslama/indoor-climbing-gym-hold-segmentation) | 岩点分割框架、配置和专项模型 |
+| Vue、Vite、Element Plus、FastAPI、pywebview | 界面、本地服务与桌面窗口 |
+| ONNX Runtime、PyTorch、TorchVision、OpenCV、NumPy、Pillow、FFmpeg | 模型运行、图像计算和视频处理 |
+| Noto CJK、MiSans | 中文字体，分别遵循原字体许可与小米字体条款 |
+
+项目代码采用 **[GPL-3.0](LICENSE)**。第三方代码、字体、组件和模型各自保留原始许可，源码许可不等于模型与训练数据的全部使用条件。模型安装时从原来源下载；Detectron2 扩展的对应源码与许可随安装包提供。
+
+完整来源、修改说明、研究参考和分发边界见 **[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)**。贡献前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。
