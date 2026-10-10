@@ -265,7 +265,7 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
         python = staging / 'runtime/python.exe'
         if webview:
             ensure_webview(cache, log)
-        event(20, '准备运行环境（2/5）', '正在下载并安装所需组件，电脑无需预装 Python。此步骤可能需要数分钟。')
+        event(20, '准备运行环境（2/5）', '正在准备运行组件，请稍候。')
         env_cache = cache / 'packages'
         command([str(python), '-m', 'pip', '--isolated', 'install', '--disable-pip-version-check',
                  '--cache-dir', str(env_cache), '--retries', '3', '--timeout', '60',
@@ -284,7 +284,7 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
                  '-c', str(staging / 'installer/dependencies-win.txt'),
                  '-r', str(staging / 'backend/requirements-local.txt'), '-r', str(staging / 'backend/requirements-holds.txt')],
                 staging, log, '运行组件安装失败。请检查网络、磁盘空间后重试；若网络限制访问 PyPI 或 PyTorch，请更换可访问的网络。')
-        event(50, '准备岩点识别模型（3/5）', '从原作者 Kaggle 地址获取约 327 MB 文件；不会上传个人资料。')
+        event(50, '准备岩点识别模型（3/5）', '正在下载岩点识别模型。')
         def hold_progress(received, total):
             fraction = received / total if total else 0
             event(50 + min(20, int(20*fraction)), '准备岩点识别模型（3/5）',
@@ -305,7 +305,7 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
                 archive.replace(archive.with_suffix('.zip.invalid'))
                 raise InstallError('岩点模型校验失败，请点击重试重新下载。')
             partial.replace(model)
-        event(72, '准备骨架识别模型（4/5）', '正在下载并校验 RTMW 与人物检测模型，约 265 MB。')
+        event(72, '准备骨架识别模型（4/5）', '正在下载并校验骨架模型。')
         from backend.scripts.install_replay_rtmw import ASSETS
         for index, (name, archive_name, url, digest) in enumerate(ASSETS):
             download(url, cache / archive_name, digest,
@@ -313,7 +313,7 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
                          f'已下载 {received/1024**2:.0f} MB' + (f' / {total/1024**2:.0f} MB' if total else '')))
         command([str(python), str(staging / 'backend/scripts/install_replay_rtmw.py'), '--cache', str(cache)],
                 staging, log, '骨架模型检查失败。请检查网络并重试；安装日志中保留具体原因。', 300)
-        event(88, '检查并完成安装（5/5）', '正在检查岩点模型、骨架模型和视频导出组件。')
+        event(88, '检查并完成安装（5/5）', '正在检查识别和视频组件。')
         check_models(staging, log)
         (staging / 'installation.json').write_text(json.dumps({'version':VERSION, 'payload':manifest_digest}), encoding='utf-8')
         import gc

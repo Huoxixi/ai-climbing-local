@@ -194,7 +194,7 @@ ai-climbing-local/
 | [FastAPI](https://github.com/fastapi/fastapi)、[Uvicorn](https://github.com/encode/uvicorn)、[Pydantic](https://github.com/pydantic/pydantic) | API、服务与数据校验依赖 | MIT / BSD-3-Clause / MIT |
 | [pywebview](https://github.com/r0x0r/pywebview) | Windows 独立窗口 | BSD-3-Clause；WebView2 为外部微软组件 |
 | [OpenCV](https://github.com/opencv/opencv)、[NumPy](https://github.com/numpy/numpy)、[Pillow](https://github.com/python-pillow/Pillow) | 视频图像、计算与绘图依赖 | Apache-2.0 / BSD-3-Clause / HPND；原生包另含第三方组件 |
-| [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) / [FFmpeg](https://ffmpeg.org/) | 视频转码与导出；用户在自己环境安装 | 包装层 BSD-2-Clause；FFmpeg 具体构建可能是 GPL，不能用包装层许可证覆盖二进制 |
+| [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) / [FFmpeg](https://ffmpeg.org/) | 视频转码与导出；安装器从软件源准备到用户环境 | 包装层 BSD-2-Clause；FFmpeg 具体构建可能是 GPL，不能用包装层许可证覆盖二进制 |
 | [Noto CJK](https://github.com/notofonts/noto-cjk) | 后端中文文字渲染；保留原字体及许可证 | SIL OFL 1.1 |
 | [MiSans](https://hyperos.mi.com/font/en/faq/) | 前端原版字体嵌入 | 小米字体条款；不是由本项目重新授权的自由字体 |
 
@@ -208,7 +208,7 @@ ai-climbing-local/
 
 | 你想做的事 | 现在能做到什么 | 使用时需要知道什么 |
 | --- | --- | --- |
-| 从照片保存一条线路 | 找出候选岩点，由你选择线路、修正漏点和边缘，再保存 | 需要另装岩点识别模型；可能认错或漏掉岩点，保存前要确认 |
+| 从照片保存一条线路 | 找出候选岩点，由你选择线路、修正漏点和边缘，再保存 | 安装器自动准备识别模型；可能认错或漏掉岩点，保存前要确认 |
 | 看清自己怎样移动 | 在视频旁显示身体骨架，辅助观察手脚位置、身体倾斜和姿态变化 | 默认每秒分析约 10 个画面；人物被遮挡、离开画面、旁人入镜或镜头晃动，都可能让结果不完整或认错人 |
 | 观察身体中心的移动 | 根据画面中的身体姿态，估算一个中心点并显示它的移动路线 | 这是平面视频里的估算，不能说明真实的三维重心或手脚用了多大力；身体关键部位看不清时会留空 |
 | 回顾哪些岩点可能用过 | 结合手脚位置和岩点位置，显示可能的接触、停留和使用记录 | 画面中手脚靠近岩点，不一定代表真正抓住或踩稳；纯骨架模式不提供这些记录 |

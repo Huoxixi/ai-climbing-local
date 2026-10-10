@@ -78,7 +78,8 @@ def build(args):
     # Capture native build inputs alongside source, license and rebuild directions.
     provenance = {'version':'0.6+a2f4a877/windows-cp312-cpu','extension_sha256':sha(native),
         'abi':{'python':'3.12-x64','torch':'2.8.0+cpu','torchvision':'0.23.0+cpu'},
-        'source_files':[{'path':p.relative_to(source).as_posix(),'sha256':sha(p)} for p in sorted(source.rglob('*')) if p.is_file()]}
+        'source_files':[{'path':p.relative_to(source).as_posix(),'sha256':sha(p)} for p in sorted(source.rglob('*'))
+                        if p.is_file() and p.suffix.lower() not in {'.pyd','.dll','.exe','.lib','.obj'}]}
     third_party = payload / 'third_party_source'
     third_party.mkdir()
     # Keep the complete source as an archive to avoid legacy Windows MAX_PATH.
