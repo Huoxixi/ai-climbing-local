@@ -28,3 +28,4 @@ jobs:
         env:
           CLIMB_DESKTOP_BUILD: '1'
       - run: python scripts/audit_public.py
+      - run: python -m unittest installer.test_engine

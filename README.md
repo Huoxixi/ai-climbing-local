@@ -2,9 +2,9 @@
 
 一个在自己电脑上运行的抱石照片选线与视频复盘工具。用照片保存自己的线路，用视频观察骨架、二维估算重心与基础身体数据，并导出复盘视频或「视频＋全部资料」。
 
-**当前公开版本：2026-10-10 源码预览版，来自本地 App `0.1.14-replay.20261009`。** 本仓库包含当前工作区更新，原始提交基线与导出范围见 [SOURCE_SNAPSHOT.json](SOURCE_SNAPSHOT.json)。本地版关闭云端收费 API，不需要填写 AI 密钥。
+**当前公开版本：`0.1.15-setup.20261010` Windows 在线安装版，功能来自本地 App `0.1.14-replay.20261009`。** 原始提交基线与导出范围见 [SOURCE_SNAPSHOT.json](SOURCE_SNAPSHOT.json)。本地版关闭云端收费 API，不需要填写 AI 密钥。
 
-发布页提供**源码＋预构建界面包**，安装后可运行；它不是已完成独立电脑验收的免安装 EXE。骨架模式可由安装脚本准备；照片岩点识别还需要自行取得合法的专项模型权重并安装 Detectron2。下载包不会包含模型、Python、Node.js 或个人素材。完整限制见下文和 [模型安装说明](docs/MODELS.md)。
+**普通用户下载一个安装 EXE 即可。** 点击「开始安装」，自动准备环境、岩点模型和骨架模型；完成后从桌面打开。无需安装 Python、Node.js、编译工具或填写命令。首次安装需要网络，以后识别在本机运行。源码和预构建界面包同时保留，供开发者使用。
 
 ## 目录
 
@@ -32,7 +32,7 @@
 | 同尺度双画面 | 左侧原视频，右侧骨架、当前岩点与随播放累积的估算重心路线 | 缺测和配准失败留空；回拖不展示未来轨迹 |
 | 基础统计 | 时间、关节角度、躯干倾角、姿态停留和二维估算重心等 | 基于本地识别结果；不是专业准确率承诺 |
 | 岩点使用显示 | 根据有证据的使用记录标亮；最后一帧显示有有效使用记录的全部岩点 | 纯骨架模式不计算或展示岩点接触统计 |
-| 视频导出 | 复盘视频 / 视频＋全部资料；保留范围与速度选择 | FFmpeg 由用户环境安装；新导出另存 |
+| 视频导出 | 复盘视频 / 视频＋全部资料；保留范围与速度选择 | 安装器自动准备视频组件；新导出另存 |
 | 资料导出 | 随视频导出结构化分析资料、证据及分析约束，供自行检查或交给自己的 AI | App 本身不发送到外部 AI |
 | 文件存储 | 桌面窗口可选择空文件夹，下次启动复制资料并切换，保留原资料 | 配置位置不迁移；浏览器模式不提供原生文件夹选择 |
 | 本地账号 | 单机 owner 身份、设置中的账号与退出入口 | 不提供多人账号隔离或公网登录服务 |
@@ -41,9 +41,26 @@
 
 ## 下载、安装与启动
 
+### 普通用户：三个步骤
+
+1. 打开 [最新发布页](https://github.com/Huoxixi/ai-climbing-local/releases/latest)，下载 `AiClimbing-Setup-0.1.15-setup.20261010.exe`。
+2. 双击安装包，点击 **开始安装**。窗口显示中文进度；出错时按提示处理，再点击 **重试安装**。
+3. 完成后点击 **打开攀岩助手**，以后双击桌面上的 **攀岩助手（公开版）**。
+
+适用于 **Windows 10/11 x64**。安装器包含独立 Python、预构建界面和已编译的岩点运行组件；模型从原作者 Kaggle / OpenMMLab 获取并校验，其他依赖从官方软件源安装。缺少 WebView2 时自动下载微软组件并验证数字签名。它是需要联网完成首次准备的完整安装器。
+
+安装 EXE 约 **56 MiB**；程序和模型安装后约 **1.53 GiB**，安装过程含解压与下载缓存约需 **2.5 GiB**。这些数字来自当前 Windows 实测，不含个人照片、视频和复盘结果；缺少 WebView2 时还需微软组件的空间。Windows 通常把 MiB / GiB 显示为 MB / GB，安装窗口为便于阅读取整为 1.6 / 2.5 GB。详情见 [验证记录](docs/VALIDATION.md)。
+
+程序安装在 `%LOCALAPPDATA%\Programs\AiClimb` 的版本目录；资料在 `%LOCALAPPDATA%\AiClimbingCommunity`，与内部 App 分开。安装和重试不覆盖个人资料。安装成功后自动清理下载缓存；重新安装同版本先检查已有程序。
+
+版本尚未做跨电脑全面验收。安装器暂未取得商业代码签名；系统可能显示未知发布者，应核对本仓库发布页和 SHA-256。不要关闭安全软件。
+
+<details>
+<summary>开发者：源码安装与启动</summary>
+
 ### 1. 获取源码
 
-**普通用户推荐：** 前往 [Releases](https://github.com/Huoxixi/ai-climbing-local/releases)，下载 `AiClimbing-local-*.zip`，解压后双击 `install.cmd`，完成后双击 `start.cmd`。这个压缩包带已构建界面，首次安装无需 Node.js。
+**源码包：** 前往 [Releases](https://github.com/Huoxixi/ai-climbing-local/releases)，下载 `AiClimbing-local-*.zip`，解压后双击 `install.cmd`，完成后双击 `start.cmd`。源码方式需要 Python，并自行准备 Detectron2；普通用户使用上方安装 EXE。
 
 **开发者：** 在 GitHub 点击 **Code → Download ZIP** 并解压，或：
 
@@ -103,6 +120,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 
 请按 [docs/MODELS.md](docs/MODELS.md) 安装 Detectron2 与专项权重。权重缺失时明确报错，不悄悄切换到云端，也不以随机轮廓冒充识别。Windows 的 Detectron2 编译需要额外工具链，本次公开包没有提供已编译的原生扩展。
 
+</details>
+
 ## 使用步骤
 
 **先体验纯骨架复盘：** 进入视频复盘 → 选择自己的视频 → 选择「只生成骨架」 → 开始本地分析 → 查看双画面和基础统计 → 导出复盘视频或视频＋全部资料。原视频保留；纯骨架模式不会生成岩点使用率。
@@ -132,6 +151,7 @@ flowchart LR
 ai-climbing-local/
 ├── README.md / THIRD_PARTY_NOTICES.md / LICENSE
 ├── install.cmd / setup.ps1          首次安装与模型准备
+├── installer/                      中文安装器、运行环境准备、下载校验与原生启动器
 ├── start.cmd / run-local.py         同源页面、实例保护和窗口生命周期
 ├── SOURCE_SNAPSHOT.json             原始版本与公开范围
 ├── frontend/
@@ -155,7 +175,7 @@ ai-climbing-local/
 └── .github/workflows/ci.yml         公开源码构建与针对性检查
 ```
 
-前后端共用当前本地 App 代码。前端仅导出本地入口可达的文件；后端按本地包规则及导入关系收集，保留内部兼容能力不等于对外提供对应功能。Python 根依赖固定为当前已使用版本，间接依赖仍由 pip 解析；前端通过 `package-lock.json` 固定。完整架构说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+前后端共用当前本地 App 代码。前端仅导出本地入口可达的文件；后端按本地包规则及导入关系收集。安装器通过 `installer/dependencies-win.txt` 固定 Windows 依赖，前端通过 `package-lock.json` 固定。源码安装方式的间接依赖仍由 pip 解析。完整架构说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 开源依赖、引用与原创部分
 
@@ -167,9 +187,9 @@ ai-climbing-local/
 | [MMPose / RTMW](https://github.com/open-mmlab/mmpose) | 使用官方 RTMW-L 384×288 导出权重；不打包完整 MMPose | 源码 Apache-2.0；权重及训练数据条件需分别查看 |
 | [YOLOX](https://github.com/Megvii-BaseDetection/YOLOX) | OpenMMLab 提供的 YOLOX-S HumanArt 人体检测导出权重 | 源码 Apache-2.0；不把源码许可证直接等同于权重全部使用条件 |
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) | CPU / Windows DirectML 推理依赖 | MIT |
-| [Detectron2](https://github.com/facebookresearch/detectron2) | 岩点 Mask R-CNN 的可选推理框架；配置基于其结构 | Apache-2.0；已使用原生构建基线 `a2f4a877`；不分发编译二进制 |
-| [Indoor Climbing Gym Hold And Route Segmentation](https://www.kaggle.com/datasets/tomasslama/indoor-climbing-gym-hold-segmentation) | Tomáš Sláma 的专项岩点分割模型与公开数据来源 | 本地来源记录写明数据元信息 CC BY-SA 4.0，研究源码 GPL-3.0；具体权重的再分发授权未完全核清，因此不上传权重 |
-| [PyTorch](https://github.com/pytorch/pytorch) / [TorchVision](https://github.com/pytorch/vision) | 可选专项模型运行依赖 | 原 BSD 通知及各原生组件的第三方许可仍适用 |
+| [Detectron2](https://github.com/facebookresearch/detectron2) | 岩点 Mask R-CNN 的推理框架；配置基于其结构 | Apache-2.0；安装 EXE 包含 cp312 CPU 扩展、原许可证、完整对应源码 ZIP 与摘要；用户无需编译 |
+| [Indoor Climbing Gym Hold And Route Segmentation](https://www.kaggle.com/datasets/tomasslama/indoor-climbing-gym-hold-segmentation) / [作者研究仓库](https://github.com/xiaoxiae/Indoor-Climbing-Hold-and-Route-Segmentation) | Tomáš Sláma 的专项岩点分割模型与公开数据来源 | Kaggle 数据元信息 CC BY-SA 4.0，研究源码 GPL-3.0；安装时直接从作者 Kaggle v4 地址获取指定模型并校验，不上传内部权重或提供镜像 |
+| [PyTorch](https://github.com/pytorch/pytorch) / [TorchVision](https://github.com/pytorch/vision) | 专项模型运行依赖 | 原 BSD 通知及各原生组件许可适用；在用户电脑上从官方 CPU wheel 准备，移除不用于运行的静态库及头文件，保留 DLL 和许可证 |
 | [Vue](https://github.com/vuejs/core)、[Vite](https://github.com/vitejs/vite)、[Element Plus](https://github.com/element-plus/element-plus)、[Axios](https://github.com/axios/axios) | 界面与通信依赖 | MIT |
 | [FastAPI](https://github.com/fastapi/fastapi)、[Uvicorn](https://github.com/encode/uvicorn)、[Pydantic](https://github.com/pydantic/pydantic) | API、服务与数据校验依赖 | MIT / BSD-3-Clause / MIT |
 | [pywebview](https://github.com/r0x0r/pywebview) | Windows 独立窗口 | BSD-3-Clause；WebView2 为外部微软组件 |
@@ -196,11 +216,11 @@ ai-climbing-local/
 
 **目前还不能做：** 自动判断线路难度、准确识别每一种攀岩技巧、给出教练级动作点评，或根据视频判断真实受力。当前公开版也没有云端 AI 点评、不同视频的技巧对比和自动定线仿真功能。
 
-**安装和兼容性：** 骨架模式可按安装说明准备；照片识别还需要额外模型和运行组件。目前已在开发电脑上检查基本运行流程，但还没有完成不同电脑、显卡和所有视频格式的全面验证，使用中可能遇到兼容问题。详细检查记录见 [docs/VALIDATION.md](docs/VALIDATION.md)。
+**安装和兼容性：** Windows 安装器自动准备照片和骨架识别所需环境与模型。目前在开发电脑的独立目录检查安装和基本运行流程，还没有完成不同电脑、显卡和所有视频格式的全面验证。详细检查记录见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 
 ## 数据、隐私和安全
 
-照片、视频、SQLite 数据库、任务状态和导出留在自己的电脑。运行时姿态推理不会自动下载模型；首次安装会访问 Python/npm 软件源与 OpenMMLab 模型地址。当前本地产品不发送媒体到付费 AI。
+照片、视频、SQLite 数据库、任务状态和导出留在自己的电脑。首次安装会访问 PyPI、PyTorch、原作者 Kaggle、OpenMMLab，缺窗口组件时访问微软；运行时不再自动下载模型。源码构建还需 npm。当前本地产品不发送媒体到付费 AI。
 
 本仓库是新建源码快照，不携带旧 Git 历史、个人媒体、生产数据、密钥、服务器地址或访问配置。`.gitignore` 排除模型、虚拟环境、数据库、缓存和运行数据。提交贡献前仍需自己检查暂存内容；忽略规则不是秘密扫描的替代品。
 
@@ -228,10 +248,10 @@ npm run build -- --mode boulder-local
 
 | 问题 | 处理方法 |
 | --- | --- |
-| 缺少 Python / npm | 安装上述官方运行环境，重开终端；Python 必须 3.12 x64 |
-| 安装失败或模型下载中断 | 查看安装末尾错误；重跑安装；校验失败文件不会被自动覆盖，先核实再处理 |
-| 模型未准备好 | 执行 RTMW 安装；照片模型另按 MODELS.md 配置 |
-| 照片识别不能运行 | 没有安装 Detectron2 / 专项权重不是可运行配置；先体验纯骨架模式 |
+| 缺少 Python / npm | 普通用户使用安装 EXE，无需配置；只有源码开发需自行安装 |
+| 安装失败或下载中断 | 按窗口中文提示处理并点击重试；保留已验证下载，损坏缓存会隔离；日志入口在安装窗口 |
+| 模型来源不能访问 | 检查网络并稍后重试；若来源要求登录或变更链接，在项目 Issues 反馈，不绕过来源限制 |
+| 照片识别不能运行 | 重新运行同版本安装器进行检查；源码用户另按 MODELS.md 安装 |
 | 骨架不完整或人物选错 | 改善取景、减少旁观者和遮挡；不能用错误骨架推断技术 |
 | 窗口打不开 | 安装 WebView2，或用 `start.cmd --browser` |
 | 导出失败 | 检查可用磁盘、FFmpeg 与原视频；保留旧结果，失败不代表原片被删除 |
@@ -240,7 +260,7 @@ npm run build -- --mode boulder-local
 
 ## 后续方向与参与
 
-优先事项是独立 Windows 电脑安装验收、专项权重授权核实、可复现的 Detectron2 构建、视频覆盖测试和独立标注质量验证。在满足权重、字体、原生组件与 FFmpeg 源码分发条件后再提供完整免安装二进制。
+优先事项是更多独立 Windows 电脑验收、视频格式覆盖和独立标注质量验证。当前先提供自动准备环境与模型的在线安装器；完全离线包仍需进一步核实所有外部模型和组件的再分发材料。
 
 欢迎通过 [Issues](https://github.com/Huoxixi/ai-climbing-local/issues) 报告系统版本、运行环境、复现步骤、预期/实际行为和经过脱敏的错误信息。不要上传密钥、含个人身份的媒体或完整资料目录。提交 PR 前阅读 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题见 [SECURITY.md](SECURITY.md)。
 
@@ -248,4 +268,4 @@ npm run build -- --mode boulder-local
 
 本项目代码采用 **GNU GPL v3.0**，详见 [LICENSE](LICENSE)。保留作者信息和修改说明；分发修改版时按许可证提供相应源码。实际 vendored 第三方代码、字体、外部模型和运行依赖保留各自许可，本项目许可证不能替它们重新授权。
 
-这份公开源码不包含授权尚待核清的专项权重，也不分发 FFmpeg、Detectron2 原生扩展或打包 Python 运行时；下载依赖和外部模型不代表所有使用场景均已取得授权。上述来源作者不为本项目功能或结论背书。
+Git 源码不包含模型、Python 或 FFmpeg 二进制。安装 EXE 含 PSF 许可的独立 Python、pip、Detectron2 原生扩展及其完整对应源码；其他组件与模型在用户电脑上直接获取。各资源保留原始条件，来源作者不为本项目功能或结论背书。详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

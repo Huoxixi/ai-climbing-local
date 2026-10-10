@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--data-root', type=Path, help='Use a separate data directory')
     parser.add_argument('--headless', action='store_true', help='Start without opening a window')
     parser.add_argument('--port', type=int, default=0, help='0 chooses a free loopback port')
+    parser.add_argument('--window-check', type=Path, help='Developer-only native page smoke check and exit')
     args = parser.parse_args()
     if not (ROOT / 'frontend/dist/index.html').is_file():
         raise SystemExit('Run setup.ps1 first: built frontend is missing.')
@@ -85,8 +86,25 @@ def main():
             while thread.is_alive():
                 thread.join(.5)
         else:
+            webview.settings['ALLOW_DOWNLOADS'] = True
             window = webview.create_window('攀岩助手 · 本地抱石',url,width=1280,height=860,min_size=(800,600))
-            webview.start(gui='edgechromium')
+            if args.window_check:
+                def check_window():
+                    import json
+                    try:
+                        for _ in range(60):
+                            state = window.evaluate_js("JSON.stringify({ready:!!document.querySelector('#app')?.children.length,text:document.body.innerText})")
+                            result = json.loads(state)
+                            if result['ready'] and '照片' in result['text']:
+                                args.window_check.write_text(json.dumps({'ready':True,'local_page':True}),encoding='utf-8')
+                                break
+                            time.sleep(.5)
+                        else:
+                            args.window_check.write_text(json.dumps({'ready':False}),encoding='utf-8')
+                    finally:
+                        window.destroy()
+                window.events.loaded += check_window
+            webview.start(gui='edgechromium', private_mode=False, storage_path=str(paths.user / 'cache/webview2'))
     except KeyboardInterrupt:
         pass
     finally:
