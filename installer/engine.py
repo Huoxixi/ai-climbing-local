@@ -357,6 +357,7 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
                 '识别组件安装失败。请检查磁盘空间后重试。')
         command([str(python), '-m', 'pip', '--isolated', 'install', '--disable-pip-version-check',
                  '--no-warn-script-location', '--no-build-isolation', '--cache-dir', str(env_cache), '--retries', '3', '--timeout', '60',
+                 '--only-binary=:all:', '--find-links', str(staging / 'installer/wheels'),
                  '-c', str(staging / 'installer/dependencies-win.txt'),
                  '-r', str(staging / 'backend/requirements-local.txt'), '-r', str(staging / 'backend/requirements-holds.txt')],
                 staging, log, '运行组件安装失败。请检查网络、磁盘空间后重试；若网络限制访问 PyPI 或 PyTorch，请更换可访问的网络。')

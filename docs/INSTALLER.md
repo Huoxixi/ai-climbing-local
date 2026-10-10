@@ -1,6 +1,6 @@
 # Windows 安装器实现与重建
 
-普通用户使用发布 EXE。以下用于开发与审查。
+普通用户下载 Windows ZIP，解压后按同目录「安装说明.txt」双击安装 EXE。以下用于开发与审查。
 
 ## 流程
 
@@ -19,11 +19,15 @@
 - 官方 pip 26.2.1 wheel，SHA-256 `71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e`。
 - Detectron2 cp312 CPU 扩展及完整对应源码。现有 C++ 构建源码与源码树核对一致；原许可证、源码 ZIP 及源文件摘要保留。ABI 为 Torch 2.8.0+cpu / TorchVision 0.23.0+cpu，MSVC 2022 x64。
 - Windows .NET Framework C# 编译器。
+- 三个固定版本纯 Python wheel：antlr4-python3-runtime 4.9.3、fvcore 0.1.5.post20221221、proxy_tools 0.1.0。由原始 PyPI 源码预打包，运行代码逐文件核对一致；ANTLR 的 pygrun 脚本只允许 Windows 换行转换。原始源码压缩包、摘要及上游许可证随 EXE 保留。详见 THIRD_PARTY_NOTICES.md。
+
+先在短路径、带 setuptools 78.1.0 与 wheel 0.45.1 的 Python 环境运行 `python installer/prepare_pure_wheels.py --output <新短目录> --python <python.exe>`。下载源由 pure-wheels.json 固定并校验。构建器再次核对源码、代码、脚本及许可证，拒绝未知文件或修改后的模块。
 
 ```powershell
 python installer/build.py --output <新输出目录> --python <Python根目录> `
   --detectron <带_C.cp312-win_amd64.pyd的detectron2目录> `
-  --detectron-source <完整对应源码目录> --pip-wheel <pip.whl> --pip-sha256 <摘要>
+  --detectron-source <完整对应源码目录> --pip-wheel <pip.whl> --pip-sha256 <摘要> `
+  --pure-wheels <上述已校验目录>
 ```
 
 Detectron2 重建使用 `installer/rebuild_detectron.py`，在 VS 2022 x64 Native Tools 环境执行，需要完整 Python 3.12 headers/libs 和固定 Torch ABI。输出新目录，不覆盖原始源码。构建器拒绝已有输出与私有输入，完整源码 ZIP 位于程序 third_party_source 下。
@@ -36,4 +40,4 @@ Detectron2 重建使用 `installer/rebuild_detectron.py`，在 VS 2022 x64 Nativ
 
 ## Windows 路径与进程保护
 
-原生安装器显式向引擎传入 KnownFolder 得到的程序与缓存路径，并固定运行环境的 LOCALAPPDATA，避免继承宿主 MSIX 虚拟目录。缓存版本目录缩短，依赖构建临时目录使用 t。后台引擎在命名事件上等待，加入本次 Job 后才获准继续，避免子进程先于隔离启动。停止关闭 Job 中的进程，不按 python 等名称结束其它程序。微软 WebView2 属于共享系统组件，已有组件不卸载；安装器自身下载文件会清理。
+原生安装器显式向引擎传入 KnownFolder 得到的程序与缓存路径，并固定运行环境的 LOCALAPPDATA，避免继承宿主 MSIX 虚拟目录。缓存版本目录缩短，临时目录使用 t。MSIX 仍可能把临时路径规范化为较长的物理路径，因此全部依赖只允许安装 wheel；三个无官方 wheel 的纯 Python 依赖预先打包，用户本机不再构建源码，无需启用系统长路径策略。后台引擎在命名事件上等待，加入本次 Job 后才获准继续，避免子进程先于隔离启动。停止关闭 Job 中的进程，不按 python 等名称结束其它程序。微软 WebView2 属于共享系统组件，已有组件不卸载；安装器自身下载文件会清理。

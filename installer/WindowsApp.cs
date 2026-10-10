@@ -206,7 +206,7 @@ internal sealed class InstallForm : Form {
     readonly StringBuilder diagnostics=new StringBuilder();
     readonly object diagnosticGate=new object();
     string app,currentStep="准备安装",failureDetail;
-    bool running,completed,attempted,cleanupPending,closeAfter;
+    bool running,completed,attempted,cleanupPending,closeAfter,finishing;
     volatile bool stopRequested;
     ProcessJob job; DateTime started;
     public InstallForm() {
@@ -261,7 +261,9 @@ internal sealed class InstallForm : Form {
         }
     }
     void RequestStop(bool exit) {
-        if(!running) return;closeAfter|=exit;stopRequested=true;stop.Enabled=false;cancel.Enabled=false;clock.Stop();
+        if(!running) return;
+        if(finishing) {closeAfter|=exit;return;}
+        closeAfter|=exit;stopRequested=true;stop.Enabled=false;cancel.Enabled=false;clock.Stop();
         step.Text="正在停止并清理";detail.Text="请稍候，正在清理本次安装文件。";
         if(job!=null) try {job.Stop();} catch(Exception ex){Record(ex.ToString());}
     }
@@ -290,7 +292,7 @@ internal sealed class InstallForm : Form {
         finally {main.Enabled=true;cancel.Enabled=true;}
     }
     async Task StartInstall() {
-        running=true;completed=false;attempted=true;stopRequested=false;closeAfter=false;app=null;failureDetail=null;
+        running=true;completed=false;attempted=true;stopRequested=false;closeAfter=false;finishing=false;app=null;failureDetail=null;
         lock(diagnosticGate) diagnostics.Clear();
         logs.Text="查看日志";main.Enabled=false;stop.Enabled=true;cancel.Enabled=true;
         started=DateTime.Now;clock.Start();currentStep="准备安装资源（1/5）";step.Text=currentStep;detail.Text="正在展开程序文件，请稍候。";
@@ -327,6 +329,10 @@ internal sealed class InstallForm : Form {
             }
         } catch(Exception ex) {Record(ex.ToString());failureDetail="无法完成安装，请查看日志后重新安装。";}
         {
+            // Commit the result on the UI thread after processing any stop request
+            // received while the engine/children were exiting. Cleanup is atomic:
+            // once the app is fully installed, closing only waits for cache cleanup.
+            success=success&&!stopRequested;finishing=true;stop.Enabled=false;cancel.Enabled=false;
             job=null;clock.Stop();
             if(!drained) {cleanupPending=true;success=false;}
             else {
@@ -334,7 +340,7 @@ internal sealed class InstallForm : Form {
                 try {await Task.Run(()=>SetupCleanup.Retry(!success));cleanupPending=false;}
                 catch(Exception ex){Record(ex.ToString());cleanupPending=true;}
             }
-            running=false;completed=success;
+            running=false;finishing=false;completed=success;
             stop.Enabled=false;main.Enabled=true;cancel.Enabled=true;progress.Value=success?100:0;
             cancel.Text=completed?"关闭":"取消安装";
             if(cleanupPending) {step.Text="清理未完成";detail.Text="文件仍被占用，请关闭占用程序后点击「继续清理」。";main.Text="继续清理";}

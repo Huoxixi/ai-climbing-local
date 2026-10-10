@@ -1,6 +1,7 @@
 """Build the online setup EXE from reviewed source, PSF Python and Apache Detectron2.
 
-Model weights and pip-installed dependencies are deliberately not bundled.
+Model weights and native pip-installed dependencies are not bundled.
+Three small pure-Python wheels include original sources and license notices.
 Every native Detectron2 build must provide its exact corresponding source tree.
 """
 import argparse
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from desktop.package_scope import assert_local_frontend
 from installer.engine import VERSION, sha
+from installer.prepare_pure_wheels import validate as validate_pure_wheels
 
 
 def copy_tree(source, destination, skip):
@@ -35,7 +37,7 @@ def build(args):
     output = args.output.resolve()
     if output.exists():
         raise RuntimeError('Choose a new build output; existing files are preserved')
-    for path in (args.python, args.detectron, args.detectron_source):
+    for path in (args.python, args.detectron, args.detectron_source, args.pure_wheels):
         if {p.lower() for p in path.parts} & {'.local','.private'}:
             raise RuntimeError('Private inputs are forbidden')
     assert_local_frontend(ROOT / 'frontend/dist')
@@ -82,6 +84,15 @@ def build(args):
                         if p.is_file() and p.suffix.lower() not in {'.pyd','.dll','.exe','.lib','.obj'}]}
     third_party = payload / 'third_party_source'
     third_party.mkdir()
+    pins, entries = validate_pure_wheels(args.pure_wheels)
+    wheels = payload / 'installer/wheels'
+    wheels.mkdir()
+    sources = third_party / 'pure-python'
+    sources.mkdir()
+    for pin, entry in zip(pins, [next(e for e in entries if e['name'] == p['name']) for p in pins]):
+        shutil.copy2(args.pure_wheels / entry['wheel'], wheels / entry['wheel'])
+        shutil.copy2(args.pure_wheels / pin['source'], sources / pin['source'])
+    shutil.copy2(args.pure_wheels / 'manifest.json', sources / 'manifest.json')
     # Keep the complete source as an archive to avoid legacy Windows MAX_PATH.
     with zipfile.ZipFile(third_party / 'detectron2-source.zip','w',compression=zipfile.ZIP_DEFLATED) as bundle:
         for path in sorted(source.rglob('*')):
@@ -114,6 +125,7 @@ if __name__ == '__main__':
     parser.add_argument('--python',type=Path,required=True,help='PSF-licensed app-local CPython 3.12 x64 tree')
     parser.add_argument('--detectron',type=Path,required=True,help='Detectron2 package with compiled CPU extension')
     parser.add_argument('--detectron-source',type=Path,required=True,help='Exact corresponding full source')
+    parser.add_argument('--pure-wheels',type=Path,required=True,help='Three verified pure-Python wheels and original sources')
     parser.add_argument('--pip-wheel',type=Path,required=True)
     parser.add_argument('--pip-sha256',required=True)
     build(parser.parse_args())
