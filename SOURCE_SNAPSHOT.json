@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-10",
+  "app_version": "0.1.14-replay.20261009",
+  "base_commit": "fea6690e4bf4530166b1a66accbb3c3b3cfd0628",
+  "includes_working_tree_changes": true,
+  "backend_core_modules": 67,
+  "frontend_source_files": 43,
+  "scope": "local boulder app only"
+}

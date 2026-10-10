@@ -1,0 +1,29 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.mjs",
+    "test:e2e": "playwright test",
+    "test:coaching": "node --test browser-tests/replay-coaching.test.mjs",
+    "test:template": "node --test browser-tests/replay-template.test.mjs",
+    "test:preview": "node --test browser-tests/replay-preview.test.mjs",
+    "test:release-browser": "node --test browser-tests/replay-actions.test.mjs browser-tests/replay-coaching.test.mjs browser-tests/replay-template.test.mjs browser-tests/photo-workflow.test.mjs browser-tests/replay-restoration.test.mjs browser-tests/replay-preview.test.mjs browser-tests/replay-paid-gate.test.mjs",
+    "test:all": "npm test && npm run test:e2e"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "axios": "1.20.0",
+    "element-plus": "^2.14.0",
+    "vue": "^3.5.30"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "vite": "^8.0.0"
+  }
+}

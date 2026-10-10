@@ -1,0 +1,30 @@
+name: public-source-checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: pip install -r backend/requirements-local.txt
+      - run: python -m unittest test_boulder_local_app test_boulder_performance test_hold_selection_skeleton test_replay_atomic_json test_replay_pose_rtmw test_replay_export_transport desktop.test_storage desktop.test_package_scope
+        env:
+          LOCAL_ONLY: 'true'
+          PYTHON_DOTENV_DISABLED: '1'
+          PYTHONPATH: .:backend
+      - run: npm ci && npm run build -- --mode boulder-local
+        working-directory: frontend
+        env:
+          CLIMB_DESKTOP_BUILD: '1'
+      - run: python scripts/audit_public.py
