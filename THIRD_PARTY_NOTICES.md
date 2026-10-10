@@ -8,7 +8,7 @@ This release preserves the local boulder application and adds a Windows online i
 - Detectron2-style YAML configurations under `backend/model_assets`: Mask R-CNN/R50-FPN from https://github.com/facebookresearch/detectron2 , Apache-2.0. Local configuration sets two classes, CPU, ROI p2/p3, threshold 0.4, short edge 1200 and at most 300 candidates. Upstream license retained in `licenses/Detectron2-LICENSE`. The setup EXE includes Detectron2 Python code, Windows cp312 CPU extension, original license, complete corresponding source ZIP and native/source digests. Unused model-zoo configs are omitted from runtime; source retains them. ABI: Torch 2.8.0+cpu / TorchVision 0.23.0+cpu, MSVC 2022 x64. Rebuild directions: docs/INSTALLER.md.
 - `backend/vendor/NotoSansSC-VF.ttf`: Noto CJK font, SIL Open Font License 1.1; original `NotoSansSC-OFL.txt` retained. https://github.com/notofonts/noto-cjk . Unmodified font used for Chinese labels.
 - `frontend/public/fonts`: original MiSans font files from Xiaomi; embedding terms are the original vendor's terms, not GPL. Source and copyright retained in its NOTICE.md: https://hyperos.mi.com/font/en/download/ and https://hyperos.mi.com/font/en/faq/ . Files are embedded as application assets, not sold separately or converted.
-- Synthetic sample SVGs are newly authored geometric demonstration assets. Internal sample photographs, user media and third-party login photography are not included.
+- The example gallery and its synthetic SVGs have been removed. Internal sample photographs, user media and third-party login photography are not included.
 
 ## External model assets (not bundled)
 

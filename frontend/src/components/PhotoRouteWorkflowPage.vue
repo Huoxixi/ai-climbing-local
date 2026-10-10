@@ -37,7 +37,7 @@
           <article v-for="item in (detail.media || []).slice(mediaPage,mediaPage+1)" :key="item.id" class="record-media__item">
             <img v-if="item.kind==='photo'" :src="photoV2AssetUrl(item.asset)" :alt="`${detail.name}的攀岩照片`" loading="lazy" />
             <video v-else :src="photoV2AssetUrl(item.asset)" controls preload="metadata" @error="mediaPlaybackErrors[item.id] = true">你的浏览器暂不支持播放这个视频。</video>
-            <p v-if="item.kind==='video' && mediaPlaybackErrors[item.id]" class="record-media__playback-error" role="status">视频已保存，但当前浏览器无法播放该编码。此资料入口暂不自动转码；AI 复盘入口可自动处理。</p>
+            <p v-if="item.kind==='video' && mediaPlaybackErrors[item.id]" class="record-media__playback-error" role="status">视频已保存，但当前浏览器无法播放该编码。此资料入口暂不自动转码；视频复盘入口可自动处理。</p>
             <div><span>{{ item.kind==='photo' ? '照片' : '视频' }}</span><time :datetime="item.created_at">{{ formatMediaDate(item) }}</time></div>
           </article>
         </div>
@@ -57,7 +57,7 @@
       <WorkspaceSheet v-if="mediaPickerOpen" title="添加到这条线路" @close="mediaPickerOpen=false">
         <p>照片最多 8 张，视频最多 2 个。</p>
         <div class="media-picker__choices"><button type="button" @click="chooseMedia('photo')"><Picture aria-hidden="true" /><strong>添加照片</strong><small>JPG、PNG、WebP 或 HEIC</small></button><button type="button" @click="chooseMedia('video')"><VideoCamera aria-hidden="true" /><strong>添加视频</strong><small>MP4、MOV 或 WebM</small></button></div>
-        <p class="media-picker__notice">此处视频仅保存为线路资料，暂不自动转码；MOV、WebM 在部分设备可能无法播放。AI 复盘入口会自动整理视频。</p>
+        <p class="media-picker__notice">此处视频仅保存为线路资料，暂不自动转码；MOV、WebM 在部分设备可能无法播放。视频复盘入口会自动整理视频。</p>
       </WorkspaceSheet>
     </template>
     <template v-else-if="view==='library'"><div class="photo-work__heading record-list__heading"><div><h2>我的记录</h2></div><button class="photo-work__primary" @click="startCapture"><Plus aria-hidden="true" />记录新线路</button></div>
@@ -99,10 +99,6 @@
           <div class="photo-work__capture-actions"><button class="photo-work__primary" :disabled="!editable" @click="isDesktop ? albumInput.click() : cameraInput.click()">{{ isDesktop ? '选择本机照片' : '拍摄墙面' }}</button><button v-if="!isDesktop" :disabled="!editable" @click="albumInput.click()">从相册选择</button></div>
           <details class="context-help"><summary>照片说明</summary><p>{{ isDesktop ? '选择本机岩壁照片，先从原图取色或选色，再识别岩点并复核。HEIC/HEIF 在本机转换为 JPEG，原照片不会修改。' : '拍下整面墙，先从原图取色或选色，再识别岩点并复核。HEIC/HEIF 会转换为 JPEG，原照片不会修改。' }}</p></details>
         </div>
-        <section class="photo-work__sample-section" aria-labelledby="photo-samples-title">
-          <h2 id="photo-samples-title">示例照片</h2>
-          <div class="photo-work__samples"><button v-for="sample in samples" :key="sample.name" :disabled="!editable || state.uploading || !!samplePreparing" @click="chooseSample(sample)"><img :src="sample.url" :alt="sample.name" /><span>{{samplePreparing===sample.name?'正在准备…':sample.name}}</span></button></div>
-        </section>
       </div>
       <p v-if="state.uploading" role="status">已上传 {{state.uploadProgress}}%<progress :value="state.uploadProgress" max="100" aria-label="照片上传进度" /></p>
     </template>
@@ -138,7 +134,7 @@
     <template v-else-if="session.status==='ready'">
       <div class="photo-work__heading"><h2>{{session.flow_version>=4 ? "选择路线岩点" : session.color+"线路"}}</h2><span>{{members.length}} 个岩点 · {{state.saving?'保存中…':'进度已保存'}}</span></div>
       <p v-if="colorFirst && !members.length" class="photo-work__notice">暂未找到{{session.color}}线路岩点。可打开“补充岩点”，点选已有候选或手动描边补点。</p>
-      <p v-if="session.ai.status==='unavailable'" class="photo-work__notice">{{session.ai.message}} <button :disabled="state.saving || !editable" @click="act('retry')">重试 AI 复核</button></p>
+      <p v-if="session.ai.status==='unavailable'" class="photo-work__notice">{{session.ai.message?.replace(/AI\s*/g, '')}} <button :disabled="state.saving || !editable" @click="act('retry')">重试识别</button></p>
       <div class="photo-work__layout">
         <PhotoReviewViewport :width="board.width" :height="board.height" :image-key="board.id">
           <div class="photo-work__image" :class="{'is-picking':drawingHold}" @click="photoClick" @keydown.esc="cancelHoldRepair"><img :src="photoV2AssetUrl(board.original_asset)" alt="线路原图，点击岩点调整" /><svg :viewBox="`0 0 ${board.width} ${board.height}`"><polygon v-for="obj in visibleObjects" :key="obj.id" :class="{'is-selected':selected===obj.id,'is-route-contour':members.includes(obj.id),'is-glow':showGlow && members.includes(obj.id),'is-hidden-contour':!showGlow && members.includes(obj.id),'is-excluded':!members.includes(obj.id)}" :points="points(obj)" tabindex="0" role="button" :aria-label="photoObjectLabel(obj, board, { member: members.includes(obj.id) })" @keydown.enter="selectRouteObject(obj)" @keydown.space.prevent="selectRouteObject(obj)" /><polyline v-if="draftContour.length" class="photo-work__draft-contour" :points="draftContour.map(p=>p.join(',')).join(' ')" /><circle v-for="(point,index) in draftContour" :key="index" class="photo-work__draft-point" :cx="point[0]" :cy="point[1]" r="3" /></svg></div>
@@ -186,20 +182,16 @@ import EditorDialog from './ui/EditorDialog.vue'
 import WorkspaceSheet from './ui/WorkspaceSheet.vue'
 import { Picture, VideoCamera, ArrowLeft, Plus } from '@element-plus/icons-vue'
 import { photoRouteV2Service as service, photoV2AssetUrl } from '../services/photoRouteService'
-import { photoSampleFile } from '../utils/photoSample'
 import { pickPhotoObject } from '../utils/photoHitTest.js'
 import { photoObjectLabel } from '../utils/photoObjectLabel.js'
 import { isPhotoFlowScreen, parsePhotoWorkflowHash, photoWorkflowHash, photoWorkflowScreen } from '../utils/photoWorkflowRoute.js'
 import { ROUTE_COLORS, ROUTE_COLOR_NAMES, hexToRgb, rgbToHex, nearestRouteColor, routeColorHex } from '../constants/routeColors.js'
-import one from '../assets/boulder-samples/synthetic-1.svg'
-import two from '../assets/boulder-samples/synthetic-2.svg'
 const workflow=inject('photoWorkflow'), access=inject('pilotAccess'), state=workflow.state
 const props=defineProps({entry:{type:String,default:'capture'}})
 const emit=defineEmits(['navigate'])
 const session=computed(()=>state.session), board=computed(()=>session.value?.board)
 const colorFirst=computed(()=>session.value?.flow_version===3 || (session.value?.flow_version===2 && session.value?.status==='awaiting_color'))
 const editable=computed(()=>true)
-const samples=[{name:'合成示例1',url:one},{name:'合成示例2',url:two}]
 const detailTab=ref('info'), recordPage=ref(0), mediaPage=ref(0), reviewTab=ref('review')
 const recordPageSize=3
 const previewColor=ref(''), previewObject=ref(''), assignedColor=ref('')
@@ -231,7 +223,7 @@ async function assignColor(){
   const value=await act('assign-color',{color:assignedColor.value,member_ids:[previewObject.value]})
   if(value){previewColor.value=assignedColor.value;previewObject.value='';assignedColor.value=''}
 }
-const cameraInput=ref(null), albumInput=ref(null), selected=ref(''), adding=ref(false), members=ref([]), failedMembers=ref(null), showOther=ref(false), showGlow=ref(true), samplePreparing=ref('')
+const cameraInput=ref(null), albumInput=ref(null), selected=ref(''), adding=ref(false), members=ref([]), failedMembers=ref(null), showOther=ref(false), showGlow=ref(true)
 const photoEditorOpen=ref(false), photoEditor=ref(null)
 let photoProposal=null
 const photoEditorService={
@@ -395,13 +387,6 @@ function navigateBack(fallback='home'){
   else{writePhotoLocation(fallback,'','replace');applyPhotoLocation()}
 }
 async function choose(event){const file=event.target.files?.[0];event.target.value='';if(!file)return;try{await workflow.choose(file);if(state.pending)writePhotoLocation('confirm')}catch(error){localError.value=error?.message || '照片暂存失败，请保持页面打开后重试。'}}
-async function chooseSample(sample){
-  if(samplePreparing.value)return
-  localError.value='';samplePreparing.value=sample.name
-  try{await workflow.choose(await photoSampleFile(sample.url,sample.name));if(state.pending)writePhotoLocation('confirm')}
-  catch{localError.value='示例照片暂时无法载入，请刷新页面后重试，或从相册选择照片。'}
-  finally{samplePreparing.value=''}
-}
 async function leaveConfirmation(){await workflow.discardPending();navigateBack('home')}
 
 async function persistMembers(ids) {if(!editable.value || state.saving)return;failedMembers.value=[...ids]; members.value=[...ids];const value=await act('members',{member_ids:ids});if(value){failedMembers.value=null;members.value=value.route.members.map(m=>m.object_id)}}
@@ -546,7 +531,7 @@ defineExpose({beforeLeave,openCurrent,returnCurrent,openLibrary})
 .photo-work__image polygon.is-route-contour{fill:rgba(244,196,48,.05);stroke:var(--ui-brand);stroke-width:2.5}.photo-work__image polygon.is-route-contour.is-glow{filter:drop-shadow(0 0 2px rgba(255,222,70,.95)) drop-shadow(0 2px 6px rgba(244,196,48,.7))}.photo-work__image polygon.is-selected{fill:rgba(244,196,48,.12);stroke:#fff7c7;stroke-width:3.5;filter:drop-shadow(0 0 2px #2d2500) drop-shadow(0 2px 7px rgba(244,196,48,.9))}.photo-work__image polygon.is-excluded{fill:transparent;stroke:rgba(255,255,255,.68);stroke-width:1;stroke-dasharray:5 5;filter:none}.photo-work__image polygon.is-muted{fill:transparent;stroke:#6f6a60;stroke-width:1;stroke-opacity:.28;stroke-dasharray:5 5;filter:none}
 .photo-work__image polygon.is-hidden-contour:not(.is-selected){opacity:0}
 .photo-work__pending{display:grid;grid-template-columns:minmax(260px,1fr) minmax(280px,420px);gap:28px;align-items:center}.photo-work__pending>img{width:100%;height:55dvh;object-fit:contain;background:#282826;border-radius:var(--ui-radius-card)}.photo-work__pending-sheet{display:flex;flex-direction:column;gap:16px}.photo-work__upload{display:grid;place-items:center;min-height:52dvh;padding:32px;text-align:center}.photo-work__upload-copy{max-width:520px}.photo-work__upload h2{font-size:clamp(26px,4vw,42px)}.photo-work__upload p{max-width:52ch;margin:14px auto 24px;color:var(--ui-ink-muted)}.photo-work__capture-actions{justify-content:center}.photo-work__capture-actions button{min-width:156px}
-.photo-work__samples{display:flex;gap:16px;justify-content:center;margin-top:24px}.photo-work__samples button{display:flex;flex-direction:column;gap:8px;max-width:180px;text-align:left}.photo-work__samples img{width:100%;height:150px;object-fit:cover;border-radius:8px}.photo-work__file{display:none}
+.photo-work__file{display:none}
 .photo-work__processing{box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex-direction:column;width:min(100%,560px);min-height:calc(100dvh - 260px);margin:0 auto;padding:48px 20px;text-align:center}.photo-work__processing--center{margin:auto;text-align:center}.photo-work__processing h2{margin:20px 0 8px;font-size:clamp(24px,3vw,34px)}.photo-work__processing>p{max-width:52ch;color:var(--ui-ink-muted)}.photo-work__processing progress{display:block;width:min(100%,460px);height:9px;margin:28px 0 18px;overflow:hidden;border:0;border-radius:999px;background:var(--ui-line);accent-color:var(--ui-brand)}.photo-work__processing progress::-webkit-progress-bar{border-radius:999px;background:var(--ui-line)}.photo-work__processing progress::-webkit-progress-value{border-radius:999px;background:var(--ui-brand)}.photo-work__processing progress::-moz-progress-bar{border-radius:999px;background:var(--ui-brand)}.photo-work__spinner{display:inline-block;width:42px;height:42px;border:4px solid var(--ui-line);border-top-color:#9f7500;border-radius:50%;animation:photo-work-spin .9s linear infinite}.photo-work__stage-list{display:flex;flex-direction:column;width:min(100%,420px);gap:8px;margin:0;padding:0;list-style:none;font-size:14px;text-align:left}.photo-work__stage-list li{display:grid;grid-template-columns:12px 1fr auto;align-items:center;gap:10px;min-height:32px;padding:4px 0;color:var(--ui-ink-muted)}.photo-work__stage-list small{font-size:12px;color:inherit}.photo-work__stage-dot{width:8px;height:8px;border-radius:50%;background:var(--ui-line-strong)}.photo-work__stage-list li.is-current{color:var(--ui-ink);font-weight:650}.photo-work__stage-list li.is-current .photo-work__stage-dot{background:var(--ui-brand);box-shadow:0 2px 9px rgba(244,196,48,.55);animation:photo-stage-pulse 1.4s ease-in-out infinite}.photo-work__stage-list li.is-done{color:var(--ui-ink-muted)}.photo-work__stage-list li.is-done .photo-work__stage-dot{background:#5b6b55}.photo-work__recovery{justify-content:center;margin-top:28px}.photo-stage-enter-active{transition:opacity 220ms ease,transform 280ms cubic-bezier(.16,1,.3,1),clip-path 280ms cubic-bezier(.16,1,.3,1)}.photo-stage-enter-from{opacity:0;transform:translateY(8px);clip-path:inset(0 0 100% 0)}
 .photo-work__error{display:flex;justify-content:space-between;gap:12px;margin:0 0 14px;padding:12px;border-radius:var(--ui-radius-small);background:#fff0ed;color:#8c3027}.photo-work__inline-error{display:grid;gap:2px;padding:12px;border-radius:var(--ui-radius-small);background:#fff0ed;color:#8c3027}.photo-work__notice{padding:12px;border-radius:var(--ui-radius-small);background:var(--ui-brand-soft)}.photo-work__advanced,.photo-work__hold-list{margin-top:6px;padding-top:18px;border-top:1px solid var(--ui-line)}.photo-work__advanced summary,.photo-work__hold-list summary{display:flex;align-items:center;min-height:44px;cursor:pointer;font-weight:600}.photo-work__hold-list>div{display:grid;gap:6px;padding-top:8px}.photo-work__hold-list button{width:100%;text-align:left}.photo-work__hold-list button.is-selected{border-color:#806000;background:var(--ui-brand-soft)}
 .photo-work__library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:24px 18px}.photo-work .photo-work__library-card{display:block;min-width:0;min-height:0;padding:0;border:0;border-radius:var(--ui-radius-card);background:transparent;text-align:left}.photo-work .photo-work__library-card:hover{background:transparent}.photo-work__library-photo{position:relative;display:grid;place-items:center;width:100%;aspect-ratio:4/5;overflow:hidden;border:1px solid #4b4c4a;border-radius:var(--ui-radius-card);background:#232421;transition:transform 180ms cubic-bezier(.16,1,.3,1),box-shadow 180ms ease}.photo-work__library-card:hover .photo-work__library-photo{transform:translateY(-2px);box-shadow:0 12px 24px rgba(28,30,33,.16)}.photo-work__library-photo img,.photo-work__library-photo svg{position:absolute;inset:0;width:100%;height:100%}.photo-work__library-photo img{object-fit:contain}.photo-work__library-photo svg{overflow:visible}.photo-work__library-photo polygon{fill:transparent;stroke:#fff;stroke-width:1.4;stroke-linejoin:round;vector-effect:non-scaling-stroke;filter:drop-shadow(0 0 1px rgba(255,255,255,.95)) drop-shadow(0 0 4px rgba(255,255,255,.8));pointer-events:none}.photo-work__library-meta{display:grid;gap:3px;padding:10px 2px 0}.photo-work__library-meta strong{overflow:hidden;font-size:15px;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}.photo-work__library-meta time{color:var(--ui-ink-muted);font-size:12px;font-variant-numeric:tabular-nums}.photo-work__library-missing{max-width:12ch;color:#e7e5de;font-size:13px;line-height:1.5;text-align:center}.photo-work__library-status,.photo-work__library-empty{display:grid;place-items:center;align-content:center;min-height:45dvh;gap:12px;text-align:center}.photo-work__library-status .photo-work__spinner{width:32px;height:32px}.photo-work__library-empty p{color:var(--ui-ink-muted)}.photo-work__library-warning{margin-top:20px;color:#725315;font-size:13px}
@@ -567,7 +552,7 @@ defineExpose({beforeLeave,openCurrent,returnCurrent,openLibrary})
   .photo-work__tools>h2:first-child{font-size:20px}.photo-work__tools>button.photo-work__primary{width:100%;min-height:48px;margin-top:4px}
   .photo-work__save-bar{top:0;grid-template-columns:1fr;margin:0 -8px;padding:10px 8px;background:var(--ui-surface)}.photo-work__save-bar>span{text-align:center;white-space:normal}
   .photo-work__pending{display:flex;flex-direction:column;gap:0;margin:-16px -12px 0}.photo-work__pending>img{width:100%;height:60dvh;border-radius:0;object-fit:contain}.photo-work__pending-sheet{position:relative;margin-top:-20px;padding:20px 20px calc(24px + env(safe-area-inset-bottom));border-radius:20px 20px 0 0;background:var(--ui-surface);box-shadow:0 -12px 28px rgba(28,30,33,.12)}.photo-work__actions{display:grid;grid-template-columns:1fr 1.6fr}.photo-work__actions button{width:100%}
-  .photo-work__upload{min-height:48dvh;padding:18px 8px}.photo-work__upload h2{font-size:30px;line-height:1.18}.photo-work__capture-actions{display:grid;width:100%;max-width:350px;grid-template-columns:1fr}.photo-work__capture-actions button{width:100%;min-width:0}.photo-work__samples{display:grid;grid-template-columns:1fr 1fr;gap:10px}.photo-work__samples button{max-width:none;padding:8px}.photo-work__samples img{height:120px}
+  .photo-work__upload{min-height:48dvh;padding:18px 8px}.photo-work__upload h2{font-size:30px;line-height:1.18}.photo-work__capture-actions{display:grid;width:100%;max-width:350px;grid-template-columns:1fr}.photo-work__capture-actions button{width:100%;min-width:0}
   .photo-work__processing{min-height:calc(100dvh - var(--ui-shell-bottom) - 32px);padding:32px 8px}.photo-work__processing.is-failed{padding-top:30px}.photo-work__stage-list{width:min(100%,340px)}.photo-work__recovery{display:grid;width:min(100%,340px);grid-template-columns:1fr}.photo-work__recovery button{width:100%}
   .photo-work__library-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 10px}.photo-work .photo-work__library-card{border-radius:12px}.photo-work__library-photo{border-radius:12px}.photo-work__library-meta{padding-top:8px}.photo-work__library-meta strong{font-size:14px}.photo-work__library-empty{min-height:52dvh;padding:20px}
   .photo-work--ready{padding-bottom:calc(184px + env(safe-area-inset-bottom))}.photo-work--ready .photo-work__tools{padding-bottom:calc(132px + env(safe-area-inset-bottom))}

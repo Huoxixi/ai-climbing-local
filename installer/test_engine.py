@@ -154,14 +154,16 @@ class InstallerTests(unittest.TestCase):
 
     def test_install_rejects_personal_data_directory_before_any_write(self):
         with tempfile.TemporaryDirectory() as tmp:
-            base = Path(tmp) / 'AiClimbingCommunity'
-            base.mkdir()
-            sentinel = base / 'saved-photo.txt'
-            sentinel.write_text('preserve')
-            with self.assertRaises(InstallError):
-                install(Path(tmp) / 'payload',base,Path(tmp) / 'cache')
-            self.assertEqual(sentinel.read_text(),'preserve')
-            self.assertEqual(list(base.iterdir()),[sentinel])
+            for name in ('AiClimbingCommunity', 'ClimbingAssistantCommunity'):
+                with self.subTest(directory=name):
+                    base = Path(tmp) / name
+                    base.mkdir()
+                    sentinel = base / 'saved-photo.txt'
+                    sentinel.write_text('preserve')
+                    with self.assertRaises(InstallError):
+                        install(Path(tmp) / 'payload',base,Path(tmp) / 'cache')
+                    self.assertEqual(sentinel.read_text(),'preserve')
+                    self.assertEqual(list(base.iterdir()),[sentinel])
 
     def test_torch_filter_keeps_runtime_and_license_updates_record(self):
         from installer.torch_runtime import filter_wheel

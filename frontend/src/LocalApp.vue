@@ -24,7 +24,7 @@ const photoWork=createPhotoWorkflow(inject('pilotAccess').session.username||'loc
 provide('photoWorkflow',photoWork)
 const isPhotoPage=computed(()=>['photo-routes','my-records'].includes(activePage.value))
 const status=computed(()=>({count:photoWork.state.session?.route?.members.length||0,dirty:!!photoWork.state.pendingChange,label:photoWork.state.saving?'保存中…':photoWork.state.session?.stage||'已同步'}))
-const title=computed(()=>({'photo-routes':'拍照定线','my-records':'我的记录','climb-replay':'AI 复盘',settings:'设置'}[activePage.value]))
+const title=computed(()=>({'photo-routes':'拍照定线','my-records':'我的记录','climb-replay':'视频复盘',settings:'设置'}[activePage.value]))
 async function changePage(page,{fromHistory=false,replace=false}={}){
   if(!['photo-routes','my-records','climb-replay','settings'].includes(page))page='photo-routes'
   if(page===activePage.value){

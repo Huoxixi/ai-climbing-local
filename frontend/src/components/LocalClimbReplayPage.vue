@@ -2,7 +2,7 @@
   <section class="replay-page" :class="{ 'is-reviewing': reviewResult && !result, 'review-is-zoomed':reviewZoom>1 }" :style="reviewWorkbenchStyle" aria-labelledby="replay-title">
     <header class="replay-heading">
       <div>
-        <h1 id="replay-title">AI 复盘</h1>
+        <h1 id="replay-title">视频复盘</h1>
       </div>
       <nav class="replay-heading-actions" aria-label="复盘资料"><button type="button" @click="historyOpen=true">最近分析<span v-if="recentJobs.length"> · {{recentJobs.length}}</span></button></nav>
     </header>

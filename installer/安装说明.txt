@@ -14,5 +14,5 @@
 如果显示「清理未完成」，关闭占用文件的程序后点击「继续清理」。
 安装失败时按提示处理，再点击「重新安装」；「查看日志」可复制具体错误。
 
-项目与帮助：https://github.com/Huoxixi/ai-climbing-local
-下载更新：https://github.com/Huoxixi/ai-climbing-local/releases/latest
+项目与帮助：https://github.com/Huoxixi/climbing-assistant-local
+下载更新：https://github.com/Huoxixi/climbing-assistant-local/releases/latest

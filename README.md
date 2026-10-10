@@ -2,7 +2,7 @@
 
 一个在自己电脑上运行的抱石照片选线与视频复盘工具。用照片保存自己的线路，用视频观察骨架、二维估算重心与基础身体数据，并导出复盘视频或「视频＋全部资料」。
 
-**当前公开版本：`0.1.16-setup.20261010` Windows 在线安装版，功能来自本地 App `0.1.14-replay.20261009`。** 原始提交基线与导出范围见 [SOURCE_SNAPSHOT.json](SOURCE_SNAPSHOT.json)。本地版关闭云端收费 API，不需要填写 AI 密钥。
+**当前公开版本：`0.1.17-local.20261010` Windows 在线安装版，功能来自本地 App `0.1.14-replay.20261009`。** 原始提交基线与导出范围见 [SOURCE_SNAPSHOT.json](SOURCE_SNAPSHOT.json)。本地版关闭云端收费 API，不需要填写外部服务密钥。
 
 **普通用户下载 Windows 安装包，解压后双击「安装攀岩助手.exe」即可。** 点击「开始安装」，自动准备环境、岩点模型和骨架模型；完成后从桌面打开。无需安装 Python、Node.js、编译工具或填写命令。首次安装需要网络，以后识别在本机运行。源码和预构建界面包同时保留，供开发者使用。
 
@@ -33,27 +33,27 @@
 | 基础统计 | 时间、关节角度、躯干倾角、姿态停留和二维估算重心等 | 基于本地识别结果；不是专业准确率承诺 |
 | 岩点使用显示 | 根据有证据的使用记录标亮；最后一帧显示有有效使用记录的全部岩点 | 纯骨架模式不计算或展示岩点接触统计 |
 | 视频导出 | 复盘视频 / 视频＋全部资料；保留范围与速度选择 | 安装器自动准备视频组件；新导出另存 |
-| 资料导出 | 随视频导出结构化分析资料、证据及分析约束，供自行检查或交给自己的 AI | App 本身不发送到外部 AI |
+| 资料导出 | 随视频导出结构化分析资料、证据及分析约束，供自行查看、检查和分析 | App 不向外部发送资料 |
 | 文件存储 | 桌面窗口可选择空文件夹，下次启动复制资料并切换，保留原资料 | 配置位置不迁移；浏览器模式不提供原生文件夹选择 |
 | 本地账号 | 单机 owner 身份、设置中的账号与退出入口 | 不提供多人账号隔离或公网登录服务 |
 
-旧生产系统的定线工作区、仿真审核、AI 实验室与服务器发布工具不属于本仓库。源码保留了一些历史分析兼容模块，但当前界面和后端入口没有开放云端评语、专业动作点评、同线路比较或动作修正产品流程。
+旧生产系统的定线工作区、仿真审核、实验室与服务器发布工具不属于本仓库。源码保留了一些历史分析兼容模块，但当前界面和后端入口没有开放云端评语、专业动作点评、同线路比较或动作修正产品流程。
 
 ## 下载、安装与启动
 
 ### 普通用户：三个步骤
 
-1. 打开 [最新发布页](https://github.com/Huoxixi/ai-climbing-local/releases/latest)，下载 **`AiClimbing-Windows-0.1.16-setup.20261010.zip`**，右键选择「全部解压」。
+1. 打开 [最新发布页](https://github.com/Huoxixi/climbing-assistant-local/releases/latest)，下载 **`ClimbingAssistant-Windows-0.1.17-local.20261010.zip`**，右键选择「全部解压」。
 2. 打开解压后的文件夹，先看 **安装说明.txt**，双击 **安装攀岩助手.exe**，点击 **开始安装**。窗口显示中文进度；失败会自动清理，按提示处理后点击 **重新安装**。
 3. 完成后点击 **打开攀岩助手**，以后双击桌面上的 **攀岩助手（公开版）**。
 
-发布页也提供单独的安装 EXE，可直接双击安装。`AiClimbing-local-*.zip` 和 GitHub 的「Code → Download ZIP」是开发者源码，解压后的 **安装指引.txt** 会指向普通用户安装包。
+发布页也提供单独的安装 EXE，可直接双击安装。`ClimbingAssistant-local-*.zip` 和 GitHub 的「Code → Download ZIP」是开发者源码，解压后的 **安装指引.txt** 会指向普通用户安装包。
 
 适用于 **Windows 10/11 x64**。安装器包含独立 Python、预构建界面和已编译的岩点运行组件；模型从原作者 Kaggle / OpenMMLab 获取并校验，其他依赖从官方软件源安装。缺少 WebView2 时自动下载微软组件并验证数字签名。它是需要联网完成首次准备的完整安装器。
 
 安装 EXE 约 **56 MiB**；程序和模型安装后约 **1.53 GiB**，安装过程含解压与下载缓存约需 **2.5 GiB**。这些数字来自当前 Windows 实测，不含个人照片、视频和复盘结果；缺少 WebView2 时还需微软组件的空间。Windows 通常把 MiB / GiB 显示为 MB / GB，安装窗口为便于阅读取整为 1.6 / 2.5 GB。详情见 [验证记录](docs/VALIDATION.md)。
 
-程序安装在 `%LOCALAPPDATA%\Programs\AiClimb` 的版本目录；资料在 `%LOCALAPPDATA%\AiClimbingCommunity`，与内部 App 分开。安装成功、失败、停止或取消后都会清理本次缓存。停止后可重新安装；取消会清理后关闭窗口。失败时不留下本次新装的环境、模型或半成品程序，已有版本和个人资料保留。重新安装同版本先检查已有程序。
+程序安装在 `%LOCALAPPDATA%\Programs\ClimbingAssistant` 的版本目录；资料在 `%LOCALAPPDATA%\ClimbingAssistantCommunity`，与内部 App 分开。安装成功、失败、停止或取消后都会清理本次缓存。停止后可重新安装；取消会清理后关闭窗口。失败时不留下本次新装的环境、模型或半成品程序，已有版本和个人资料保留。重新安装同版本先检查已有程序。
 
 版本尚未做跨电脑全面验收。安装器暂未取得商业代码签名；系统可能显示未知发布者，应核对本仓库发布页和 SHA-256。不要关闭安全软件。
 
@@ -62,13 +62,13 @@
 
 ### 1. 获取源码
 
-**源码包：** 前往 [Releases](https://github.com/Huoxixi/ai-climbing-local/releases)，下载 `AiClimbing-local-*.zip`，解压后双击 `install.cmd`，完成后双击 `start.cmd`。源码方式需要 Python，并自行准备 Detectron2；普通用户使用上方安装 EXE。
+**源码包：** 前往 [Releases](https://github.com/Huoxixi/climbing-assistant-local/releases)，下载 `ClimbingAssistant-local-*.zip`，解压后双击 `install.cmd`，完成后双击 `start.cmd`。源码方式需要 Python，并自行准备 Detectron2；普通用户使用上方安装 EXE。
 
 **开发者：** 在 GitHub 点击 **Code → Download ZIP** 并解压，或：
 
 ```powershell
-git clone https://github.com/Huoxixi/ai-climbing-local.git
-cd ai-climbing-local
+git clone https://github.com/Huoxixi/climbing-assistant-local.git
+cd climbing-assistant-local
 ```
 
 发布页提供同版本源码压缩包及 SHA-256 校验文件。程序源码与个人数据分别保存；不要解压覆盖自己的资料文件夹。
@@ -90,7 +90,7 @@ cd ai-climbing-local
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-脚本在本目录创建 `.venv`，安装依赖，从 OpenMMLab 官方地址下载并校验 RTMW/YOLOX 模型。发布包的预构建界面通过清单校验后直接使用；只有纯源码下载或 `-RebuildFrontend` 才需要 Node.js 构建。脚本不读取旧开发目录，不复制你的照片或密钥，不请求任何收费 AI 服务。
+脚本在本目录创建 `.venv`，安装依赖，从 OpenMMLab 官方地址下载并校验 RTMW/YOLOX 模型。发布包的预构建界面通过清单校验后直接使用；只有纯源码下载或 `-RebuildFrontend` 才需要 Node.js 构建。脚本不读取旧开发目录，不复制你的照片或密钥，不请求任何收费分析服务。
 
 自定义 Python：
 
@@ -112,7 +112,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 
 浏览器模式中关闭网页不会结束后台；在启动终端按 `Ctrl+C` 退出。每次启动使用空闲的本地端口，不占用原项目端口。程序只监听 `127.0.0.1`，以实例凭证保护页面、API 与媒体。
 
-默认资料位置为 `%LOCALAPPDATA%\AiClimbingCommunity`，与内部 App 的 `AiClimbing` 目录独立。指定新位置可用：
+默认资料位置为 `%LOCALAPPDATA%\ClimbingAssistantCommunity`，与内部 App 的资料目录独立；旧版公开资料自动沿用。指定新位置可用：
 
 ```powershell
 .\start.cmd --data-root 'D:\MyClimbingData'
@@ -132,8 +132,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 
 **保存照片线路：** 上传清晰的完整岩壁照片 → 整图识别 → 自选线路成员 → 对漏点和边缘进行精修 → 确认保存。当前默认路线为空，不自动假定所有同色岩点属于同一线路。
 
-页面中的合成示例用于展示操作，不是训练数据、真实用户照片或识别准确率基准。
-
 ## 项目架构
 
 ```mermaid
@@ -150,7 +148,7 @@ flowchart LR
 ```
 
 ```text
-ai-climbing-local/
+climbing-assistant-local/
 ├── README.md / THIRD_PARTY_NOTICES.md / LICENSE
 ├── install.cmd / setup.ps1          首次安装与模型准备
 ├── installer/                      中文安装器、运行环境准备、下载校验与原生启动器
@@ -216,13 +214,13 @@ ai-climbing-local/
 | 回顾哪些岩点可能用过 | 结合手脚位置和岩点位置，显示可能的接触、停留和使用记录 | 画面中手脚靠近岩点，不一定代表真正抓住或踩稳；纯骨架模式不提供这些记录 |
 | 留下复盘资料 | 查看基础统计，导出复盘视频，或一起导出分析资料，方便之后回看 | 原视频与已有结果保留；导出需要电脑有足够的存储空间 |
 
-**目前还不能做：** 自动判断线路难度、准确识别每一种攀岩技巧、给出教练级动作点评，或根据视频判断真实受力。当前公开版也没有云端 AI 点评、不同视频的技巧对比和自动定线仿真功能。
+**目前还不能做：** 自动判断线路难度、准确识别每一种攀岩技巧、给出教练级动作点评，或根据视频判断真实受力。当前公开版也没有云端点评、不同视频的技巧对比和自动定线仿真功能。
 
 **安装和兼容性：** Windows 安装器自动准备照片和骨架识别所需环境与模型。目前在开发电脑的独立目录检查安装和基本运行流程，还没有完成不同电脑、显卡和所有视频格式的全面验证。详细检查记录见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 
 ## 数据、隐私和安全
 
-照片、视频、SQLite 数据库、任务状态和导出留在自己的电脑。首次安装会访问 PyPI、PyTorch、原作者 Kaggle、OpenMMLab，缺窗口组件时访问微软；运行时不再自动下载模型。源码构建还需 npm。当前本地产品不发送媒体到付费 AI。
+照片、视频、SQLite 数据库、任务状态和导出留在自己的电脑。首次安装会访问 PyPI、PyTorch、原作者 Kaggle、OpenMMLab，缺窗口组件时访问微软；运行时不再自动下载模型。源码构建还需 npm。当前本地产品不向外部分析服务发送媒体。
 
 本仓库是新建源码快照，不携带旧 Git 历史、个人媒体、生产数据、密钥、服务器地址或访问配置。`.gitignore` 排除模型、虚拟环境、数据库、缓存和运行数据。提交贡献前仍需自己检查暂存内容；忽略规则不是秘密扫描的替代品。
 
@@ -257,14 +255,14 @@ npm run build -- --mode boulder-local
 | 骨架不完整或人物选错 | 改善取景、减少旁观者和遮挡；不能用错误骨架推断技术 |
 | 窗口打不开 | 安装 WebView2，或用 `start.cmd --browser` |
 | 导出失败 | 检查可用磁盘、FFmpeg 与原视频；保留旧结果，失败不代表原片被删除 |
-| 设置中不显示 AI 服务 | 当前本地范围已关闭这些接口，属于预期行为 |
+| 设置中不显示外部分析服务 | 当前本地范围已关闭这些接口，属于预期行为 |
 | 更新后历史资料不见了 | 核对 `--data-root` 或默认 Community 目录；内部旧 App 目录不会自动导入 |
 
 ## 后续方向与参与
 
 优先事项是更多独立 Windows 电脑验收、视频格式覆盖和独立标注质量验证。当前先提供自动准备环境与模型的在线安装器；完全离线包仍需进一步核实所有外部模型和组件的再分发材料。
 
-欢迎通过 [Issues](https://github.com/Huoxixi/ai-climbing-local/issues) 报告系统版本、运行环境、复现步骤、预期/实际行为和经过脱敏的错误信息。不要上传密钥、含个人身份的媒体或完整资料目录。提交 PR 前阅读 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题见 [SECURITY.md](SECURITY.md)。
+欢迎通过 [Issues](https://github.com/Huoxixi/climbing-assistant-local/issues) 报告系统版本、运行环境、复现步骤、预期/实际行为和经过脱敏的错误信息。不要上传密钥、含个人身份的媒体或完整资料目录。提交 PR 前阅读 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题见 [SECURITY.md](SECURITY.md)。
 
 ## 许可证
 

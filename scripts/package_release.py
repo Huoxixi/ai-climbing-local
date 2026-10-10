@@ -32,7 +32,7 @@ def main():
     # A local ignored manifest allows the installer to verify the built UI here too.
     (ROOT / 'frontend-manifest.json').write_text(manifest,encoding='utf-8')
     target.parent.mkdir(parents=True,exist_ok=True)
-    prefix='AiClimbing-local/'
+    prefix='ClimbingAssistant-local/'
     subprocess.run(['git','archive','--format=zip','--prefix='+prefix,'-o',str(target),'HEAD'],cwd=ROOT,check=True)
     with zipfile.ZipFile(target,'a',compression=zipfile.ZIP_DEFLATED) as bundle:
         for item in files:

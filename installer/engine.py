@@ -15,8 +15,8 @@ import urllib.request
 import zipfile
 import uuid
 
-VERSION = '0.1.16-setup.20261010'
-OWNER = 'AiClimbingCommunitySetup'
+VERSION = '0.1.17-local.20261010'
+OWNER = 'ClimbingAssistantSetup'
 # Rounded above the measured peak including the extracted setup payload. GiB,
 # matching the values Windows commonly labels GB; see docs/VALIDATION.md.
 INSTALL_PEAK_BYTES = int(2.5 * 1024**3)
@@ -66,7 +66,7 @@ def download(url, target, digest=None, report=None, attempts=3):
     for attempt in range(attempts):
         try:
             offset = partial.stat().st_size if partial.exists() else 0
-            headers = {'User-Agent': 'AiClimbingCommunitySetup/0.1.16', 'Accept-Encoding': 'identity'}
+            headers = {'User-Agent': 'ClimbingAssistantSetup/0.1.17', 'Accept-Encoding': 'identity'}
             if offset:
                 headers['Range'] = f'bytes={offset}-'
             with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=60) as response:
@@ -167,9 +167,9 @@ def ensure_webview(cache, log):
 def shortcuts(target, log):
     # COM calls are in a fixed script; user/program paths are arguments, never code.
     command(['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-             '-File', str(target / 'installer/shortcuts.ps1'), '-App', str(target / 'AiClimbing.exe'),
+             '-File', str(target / 'installer/shortcuts.ps1'), '-App', str(target / 'ClimbingAssistant.exe'),
              '-Directory', str(target), '-BackupDirectory', str(log.parent / 'links')], target, log,
-            '程序已安装，但快捷方式创建失败。可直接打开安装目录中的 AiClimbing.exe。', 60)
+            '程序已安装，但快捷方式创建失败。可直接打开安装目录中的 ClimbingAssistant.exe。', 60)
 
 
 def check_models(app, log):
@@ -201,7 +201,7 @@ def begin_transaction(base, cache):
 def rollback(base, cache, payload=None):
     """Remove only folders bearing this transaction's ownership marker."""
     base,cache = Path(base).resolve(),Path(cache).resolve()
-    protected = {'.local','.private','aiclimbing','aiclimbingcommunity'}
+    protected = {'.local','.private','aiclimbing','aiclimbingcommunity','climbingassistantcommunity'}
     if any(p.casefold() in protected for p in (*base.parts,*cache.parts)):
         raise InstallError('不能清理个人资料目录。')
     journal = cache / 'transaction.json'
@@ -213,7 +213,7 @@ def rollback(base, cache, payload=None):
         if (links / 'links.json').is_file():
             script = (Path(payload) if payload else Path(__file__).resolve().parents[1]) / 'installer/shortcuts.ps1'
             subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass',
-                            '-File',str(script),'-App',str(base / VERSION / 'AiClimbing.exe'),
+                            '-File',str(script),'-App',str(base / VERSION / 'ClimbingAssistant.exe'),
                             '-Directory',str(base / VERSION),'-BackupDirectory',str(links),'-Restore'],
                            check=True,creationflags=0x08000000 if os.name == 'nt' else 0)
         for name in (VERSION+'.installing',VERSION):
@@ -281,7 +281,7 @@ def remaining_space(payload, staging, cache):
 def install(payload, base, cache, make_shortcuts=True, webview=True):
     payload, base, cache = Path(payload).resolve(), Path(base).resolve(), Path(cache).resolve()
     # Developer/test override is explicit; never allow an installation into a data directory.
-    protected = {'aiclimbingcommunity', 'aiclimbing', '.local', '.private'}
+    protected = {'aiclimbingcommunity', 'aiclimbing', 'climbingassistantcommunity', '.local', '.private'}
     if any(p.casefold() in protected for p in (*base.parts,*cache.parts)) or base == payload or base.is_relative_to(payload):
         raise InstallError('程序安装位置不能是个人资料目录，请使用默认安装位置。')
     base.mkdir(parents=True, exist_ok=True)
@@ -308,7 +308,7 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
             if make_shortcuts:
                 shortcuts(target, log)
             clean_download_cache(cache)
-            event(100, '已经安装完成', '可从桌面打开「攀岩助手（公开版）」。', done=True, app=str(target / 'AiClimbing.exe'))
+            event(100, '已经安装完成', '可从桌面打开「攀岩助手（公开版）」。', done=True, app=str(target / 'ClimbingAssistant.exe'))
             return target
         event(3, '检查电脑和安装资源', '首次需要联网 · 安装约需 2.5 GB，完成后约 1.6 GB。')
         if sys.maxsize < 2**32 or sys.version_info[:2] != (3, 12):
@@ -406,7 +406,7 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
         if make_shortcuts:
             shortcuts(target, log)
         clean_download_cache(cache)
-        event(100, '安装完成', '可从桌面打开「攀岩助手（公开版）」。以后使用不需要重新下载。', done=True, app=str(target / 'AiClimbing.exe'))
+        event(100, '安装完成', '可从桌面打开「攀岩助手（公开版）」。以后使用不需要重新下载。', done=True, app=str(target / 'ClimbingAssistant.exe'))
         return target
     finally:
         lock.seek(0)
@@ -417,8 +417,8 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--payload', type=Path, required=True)
-    parser.add_argument('--base', type=Path, default=Path(os.environ['LOCALAPPDATA']) / 'Programs/AiClimb')
-    parser.add_argument('--cache', type=Path, default=Path(os.environ['LOCALAPPDATA']) / 'ClimbSetup' / '0.1.16')
+    parser.add_argument('--base', type=Path, default=Path(os.environ['LOCALAPPDATA']) / 'Programs/ClimbingAssistant')
+    parser.add_argument('--cache', type=Path, default=Path(os.environ['LOCALAPPDATA']) / 'ClimbingSetup' / '0.1.17')
     parser.add_argument('--no-shortcuts', action='store_true')
     parser.add_argument('--skip-webview', action='store_true', help='Developer verification only')
     parser.add_argument('--gate', help='Native process-job start gate')

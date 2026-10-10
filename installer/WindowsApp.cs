@@ -13,10 +13,10 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 internal static class WindowsApp {
-    internal const string Version = "0.1.16-setup.20261010";
+    internal const string Version = "0.1.17-local.20261010";
     internal static readonly string LocalRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-    internal static readonly string ProgramRoot = Path.Combine(LocalRoot,"Programs","AiClimb");
-    internal static readonly string Cache = Path.Combine(LocalRoot, "ClimbSetup", "0.1.16");
+    internal static readonly string ProgramRoot = Path.Combine(LocalRoot,"Programs","ClimbingAssistant");
+    internal static readonly string Cache = Path.Combine(LocalRoot, "ClimbingSetup", "0.1.17");
     internal static string Quote(string text) { return "\"" + text.Replace("\"", "\\\"") + "\""; }
     [STAThread] static int Main(string[] args) {
         Application.EnableVisualStyles();
@@ -27,7 +27,7 @@ internal static class WindowsApp {
         try {
             if(args.Length == 2 && args[0] == "--extract-to") { Extract(args[1]); return 0; }
             bool first;
-            using(var mutex = new Mutex(true, "Local\\AiClimbingCommunitySetup-" + Environment.UserName, out first)) {
+            using(var mutex = new Mutex(true, "Local\\ClimbingAssistantSetup-" + Environment.UserName, out first)) {
                 if(!first) { MessageBox.Show("另一个安装窗口已打开，请在那个窗口继续。", "攀岩助手安装"); return 1; }
                 Application.Run(new InstallForm());
             }
@@ -37,7 +37,7 @@ internal static class WindowsApp {
     }
     static int Launch() {
         string root = AppDomain.CurrentDomain.BaseDirectory;
-        string logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AiClimbingCommunitySetup");
+        string logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClimbingAssistantSetup");
         Directory.CreateDirectory(logDir);
         string log = Path.Combine(logDir, "启动日志.txt");
         bool first;
@@ -151,7 +151,7 @@ internal static class SetupCleanup {
         string journal=Path.Combine(cache,"transaction.json");
         if(rollback && File.Exists(journal)) {
             var state=Read(journal);
-            if(Convert.ToString(state["owner"])!="AiClimbingCommunitySetup" ||
+            if(Convert.ToString(state["owner"])!="ClimbingAssistantSetup" ||
                 Convert.ToString(state["version"])!=WindowsApp.Version ||
                 !String.Equals(Path.GetFullPath(Convert.ToString(state["base"])),Path.GetFullPath(root),StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Installation ownership mismatch");
@@ -159,7 +159,7 @@ internal static class SetupCleanup {
             if(File.Exists(Path.Combine(links,"links.json"))) {
                 string script=Path.Combine(cache,"payload","installer","shortcuts.ps1");
                 var info=new ProcessStartInfo("powershell.exe","-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "+
-                    WindowsApp.Quote(script)+" -App "+WindowsApp.Quote(Path.Combine(root,WindowsApp.Version,"AiClimbing.exe"))+
+                    WindowsApp.Quote(script)+" -App "+WindowsApp.Quote(Path.Combine(root,WindowsApp.Version,"ClimbingAssistant.exe"))+
                     " -Directory "+WindowsApp.Quote(Path.Combine(root,WindowsApp.Version))+" -BackupDirectory "+WindowsApp.Quote(links)+" -Restore");
                 info.UseShellExecute=false;info.CreateNoWindow=true;
                 using(var process=Process.Start(info)) {
@@ -303,7 +303,7 @@ internal sealed class InstallForm : Form {
             string payload=Path.Combine(WindowsApp.Cache,"payload");
             await Task.Run(()=>WindowsApp.Extract(payload));
             if(!stopRequested) {
-                string gateName="Local\\AiClimbSetupGate-"+Guid.NewGuid().ToString("N");
+                string gateName="Local\\ClimbingAssistantGate-"+Guid.NewGuid().ToString("N");
                 using(var startGate=new EventWaitHandle(false,EventResetMode.ManualReset,gateName))
                 using(var owned=new ProcessJob())
                 using(var process=new Process()) {

@@ -103,7 +103,7 @@ def build(args):
     flags = ['/nologo','/target:winexe','/platform:x64','/reference:System.Windows.Forms.dll',
              '/reference:System.Drawing.dll','/reference:System.Web.Extensions.dll',
              '/reference:System.IO.Compression.dll','/win32manifest:'+str(ROOT / 'installer/windows.manifest')]
-    subprocess.run([str(compiler),*flags,'/define:LAUNCHER','/out:'+str(payload / 'AiClimbing.exe'),str(ROOT / 'installer/WindowsApp.cs')],check=True)
+    subprocess.run([str(compiler),*flags,'/define:LAUNCHER','/out:'+str(payload / 'ClimbingAssistant.exe'),str(ROOT / 'installer/WindowsApp.cs')],check=True)
     manifest = {'version':VERSION,'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
                 'files':[{'path':p.relative_to(payload).as_posix(),'bytes':p.stat().st_size,'sha256':sha(p)}
                          for p in sorted(payload.rglob('*')) if p.is_file()]}
@@ -113,7 +113,7 @@ def build(args):
         for path in sorted(payload.rglob('*')):
             if path.is_file():
                 bundle.write(path,path.relative_to(payload).as_posix())
-    executable = output / ('AiClimbing-Setup-'+VERSION+'.exe')
+    executable = output / ('ClimbingAssistant-Setup-'+VERSION+'.exe')
     subprocess.run([str(compiler),*flags,'/resource:'+str(archive)+',payload.zip','/out:'+str(executable),str(ROOT / 'installer/WindowsApp.cs')],check=True)
     executable.with_suffix('.exe.sha256').write_text(sha(executable)+'  '+executable.name+'\n',encoding='utf-8')
     print(json.dumps({'installer':str(executable),'bytes':executable.stat().st_size,'sha256':sha(executable),'payload_files':len(manifest['files'])}))

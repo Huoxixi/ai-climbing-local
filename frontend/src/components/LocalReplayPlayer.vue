@@ -42,7 +42,7 @@
         <button v-if="exportBusy" type="button" @click="cancelExport">停止导出</button>
         <a v-if="state?.export_media && exportContent === 'video'" :href="downloadUrl" download>下载复盘视频 · {{ state.export_media.scope === 'full' ? '完整复盘' : '动作片段' }} · {{ state.export_media.speed }}×</a>
         <a v-else-if="state?.export_media" :href="packageUrl" download="climb-replay-package.zip">下载视频＋全部资料</a>
-        <p v-if="exportContent === 'package'">资料包包含复盘视频、可用原片、全部本地计算数据（时间、身体角度、估算重心等）、提示词与约束及证据画面。解压后可交给自己的 AI；原片时间与慢放、片段时间的换算见包内说明。</p>
+        <p v-if="exportContent === 'package'">资料包包含复盘视频、可用原片、全部本地计算数据（时间、身体角度、估算重心等）、提示词与约束及证据画面。解压后可查看完整资料；原片时间与慢放、片段时间的换算见包内说明。</p>
       </template>
       <template v-else>
         <p v-if="busy || submitting" role="status">正在本地准备导出，完成后可选择范围和速度。不会重新识别骨架或新增姿态费用。</p>

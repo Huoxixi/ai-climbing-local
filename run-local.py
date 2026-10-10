@@ -22,7 +22,8 @@ def main():
     args = parser.parse_args()
     if not (ROOT / 'frontend/dist/index.html').is_file():
         raise SystemExit('Run setup.ps1 first: built frontend is missing.')
-    default_data = Path(os.environ.get('LOCALAPPDATA', Path.home() / '.local/share')) / 'AiClimbingCommunity'
+    from desktop.paths import community_data_root
+    default_data = community_data_root(os.environ.get('LOCALAPPDATA', Path.home() / '.local/share'))
     user = (args.data_root or default_data).resolve()
     if user == ROOT or ROOT in user.parents:
         raise SystemExit('User data must be outside the source folder.')

@@ -5,12 +5,22 @@ import unittest
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from desktop.paths import resolve_paths, isolated_environment
+from desktop.paths import resolve_paths, isolated_environment, community_data_root
 from desktop.server import create_app
 from desktop.storage import schedule_change, apply_pending_change, read_settings
 
 
 class StorageTests(unittest.TestCase):
+    def test_rebranding_preserves_legacy_community_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp)
+            self.assertEqual(community_data_root(local), local / 'ClimbingAssistantCommunity')
+            legacy = local / 'AiClimbingCommunity'
+            legacy.mkdir()
+            (legacy / 'saved-record.txt').write_text('keep')
+            self.assertEqual(community_data_root(local), legacy)
+            self.assertEqual((legacy / 'saved-record.txt').read_text(), 'keep')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)

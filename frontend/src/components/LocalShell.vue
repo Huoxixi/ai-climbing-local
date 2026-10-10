@@ -2,9 +2,9 @@
   <div class="app-shell workspace-boulder">
     <header class="app-header">
       <div class="app-header-main">
-        <button class="brand-block" type="button" aria-label="返回抱石项目" @click="$emit('update:active', 'photo-routes')">
+        <button class="brand-block" type="button" aria-label="返回攀岩助手" @click="$emit('update:active', 'photo-routes')">
           <span class="brand-mark"><Grid /></span>
-          <span><strong>抱石项目</strong><small>攀岩助手</small></span>
+          <span><strong>攀岩助手</strong><small>攀岩助手</small></span>
         </button>
         <nav class="desktop-nav" aria-label="主导航">
           <button v-for="item in desktopItems" :key="item.key" :class="{ active: active === item.key }" :aria-current="active === item.key ? 'page' : undefined" @click="$emit('update:active', item.key)">{{ item.label }}</button>
@@ -37,7 +37,7 @@
 import { Camera, Collection, Grid, Setting, VideoCamera } from '@element-plus/icons-vue'
 defineProps({active:String,title:String,holdCount:Number,dirty:Boolean,saveLabel:String,showSync:Boolean,contextLabel:{type:String,default:'个人抱石记录'},boardLabel:{type:String,default:'个人抱石记录'}})
 defineEmits(['update:active','close-settings'])
-const desktopItems=[{key:'photo-routes',label:'拍照定线',short:'拍照定线',icon:Camera},{key:'my-records',label:'我的记录',short:'我的记录',icon:Collection},{key:'climb-replay',label:'AI 复盘',short:'AI 复盘',icon:VideoCamera}]
+const desktopItems=[{key:'photo-routes',label:'拍照定线',short:'拍照定线',icon:Camera},{key:'my-records',label:'我的记录',short:'我的记录',icon:Collection},{key:'climb-replay',label:'视频复盘',short:'视频复盘',icon:VideoCamera}]
 const mobileItems=desktopItems
 </script>
 <style scoped>

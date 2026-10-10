@@ -33,13 +33,20 @@ class DesktopPaths:
         probe.unlink()
 
 
+def community_data_root(local):
+    """Reuse existing community data; changing the product name must not lose it."""
+    local = Path(local)
+    legacy = local / 'AiClimbingCommunity'
+    return legacy if legacy.exists() else local / 'ClimbingAssistantCommunity'
+
+
 def resolve_paths(install=None, user=None):
     install = Path(install or Path(__file__).resolve().parents[1]).resolve()
     if user is None:
         local = os.environ.get("LOCALAPPDATA")
         if not local:
             raise RuntimeError("Windows 用户应用数据目录不可用。")
-        user = Path(local) / "AiClimbing"
+        user = community_data_root(local)
     user = Path(user).resolve()
     # An explicit test override must never redirect the desktop into private data.
     if any(part.lower() in {".local", ".private"} for part in user.parts):
