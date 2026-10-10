@@ -1,4 +1,4 @@
-"""Isolated, resumable installation engine. Only writes program/setup folders."""
+"""Isolated transactional installation; failure removes this attempt's files."""
 import argparse
 import ctypes
 import hashlib
@@ -13,8 +13,10 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
+import uuid
 
-VERSION = '0.1.15-setup.20261010'
+VERSION = '0.1.16-setup.20261010'
+OWNER = 'AiClimbingCommunitySetup'
 # Rounded above the measured peak including the extracted setup payload. GiB,
 # matching the values Windows commonly labels GB; see docs/VALIDATION.md.
 INSTALL_PEAK_BYTES = int(2.5 * 1024**3)
@@ -64,7 +66,7 @@ def download(url, target, digest=None, report=None, attempts=3):
     for attempt in range(attempts):
         try:
             offset = partial.stat().st_size if partial.exists() else 0
-            headers = {'User-Agent': 'AiClimbingCommunitySetup/0.1.15', 'Accept-Encoding': 'identity'}
+            headers = {'User-Agent': 'AiClimbingCommunitySetup/0.1.16', 'Accept-Encoding': 'identity'}
             if offset:
                 headers['Range'] = f'bytes={offset}-'
             with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=60) as response:
@@ -104,7 +106,7 @@ def download(url, target, digest=None, report=None, attempts=3):
             last = exc
         if attempt + 1 < attempts:
             time.sleep(2)
-    raise InstallError('下载连接中断或超时。请检查网络后点击重试；已下载部分会尽量接续。') from last
+    raise InstallError('下载连接中断或超时。请检查网络后重新安装。') from last
 
 
 def clean_environment():
@@ -119,7 +121,7 @@ def clean_environment():
 def command(argv, cwd, log, error, timeout=1800):
     with log.open('a', encoding='utf-8') as stream:
         env = clean_environment()
-        temporary = log.parent / 'temporary'
+        temporary = log.parent / 't'
         temporary.mkdir(exist_ok=True)
         env.update(TEMP=str(temporary), TMP=str(temporary))
         process = subprocess.Popen(argv, cwd=cwd, env=env, stdout=stream,
@@ -166,7 +168,7 @@ def shortcuts(target, log):
     # COM calls are in a fixed script; user/program paths are arguments, never code.
     command(['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
              '-File', str(target / 'installer/shortcuts.ps1'), '-App', str(target / 'AiClimbing.exe'),
-             '-Directory', str(target)], target, log,
+             '-Directory', str(target), '-BackupDirectory', str(log.parent / 'links')], target, log,
             '程序已安装，但快捷方式创建失败。可直接打开安装目录中的 AiClimbing.exe。', 60)
 
 
@@ -177,7 +179,7 @@ def check_models(app, log):
 
 def clean_download_cache(cache):
     cache = Path(cache).resolve()
-    for name in ('packages','torch-runtime','temporary'):
+    for name in ('packages','torch-runtime','temporary','t'):
         directory = cache / name
         if directory.exists() and directory.resolve().is_relative_to(cache) and not directory.is_symlink():
             shutil.rmtree(directory,ignore_errors=True)
@@ -185,6 +187,74 @@ def clean_download_cache(cache):
         path = cache / name
         if path.is_file() and path.resolve().is_relative_to(cache):
             path.unlink(missing_ok=True)
+
+
+def begin_transaction(base, cache):
+    target = base / VERSION
+    journal = cache / 'transaction.json'
+    state = {'owner':OWNER, 'version':VERSION, 'base':str(base),
+             'token':uuid.uuid4().hex, 'created_target':not target.exists()}
+    journal.write_text(json.dumps(state),encoding='utf-8')
+    return state
+
+
+def rollback(base, cache, payload=None):
+    """Remove only folders bearing this transaction's ownership marker."""
+    base,cache = Path(base).resolve(),Path(cache).resolve()
+    protected = {'.local','.private','aiclimbing','aiclimbingcommunity'}
+    if any(p.casefold() in protected for p in (*base.parts,*cache.parts)):
+        raise InstallError('不能清理个人资料目录。')
+    journal = cache / 'transaction.json'
+    if journal.is_file():
+        state = json.loads(journal.read_text('utf-8'))
+        if state.get('owner') != OWNER or state.get('version') != VERSION or Path(state['base']).resolve() != base:
+            raise InstallError('安装目录归属检查失败，未删除文件。')
+        links = cache / 'links'
+        if (links / 'links.json').is_file():
+            script = (Path(payload) if payload else Path(__file__).resolve().parents[1]) / 'installer/shortcuts.ps1'
+            subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass',
+                            '-File',str(script),'-App',str(base / VERSION / 'AiClimbing.exe'),
+                            '-Directory',str(base / VERSION),'-BackupDirectory',str(links),'-Restore'],
+                           check=True,creationflags=0x08000000 if os.name == 'nt' else 0)
+        for name in (VERSION+'.installing',VERSION):
+            path = base / name
+            if name == VERSION and not state.get('created_target'):
+                continue
+            if not path.exists():
+                continue
+            marker = path / '.setup-owned.json'
+            if not marker.is_file():
+                raise InstallError('准备目录没有本次安装标记，未删除文件。')
+            owned = json.loads(marker.read_text('utf-8'))
+            if owned != state or not path.resolve().is_relative_to(base) or path.is_symlink():
+                raise InstallError('准备目录归属不一致，未删除文件。')
+            # Keep the ownership marker until every other file is gone, so a
+            # locked file cannot make a later cleanup lose its authorization.
+            for child in path.iterdir():
+                if child == marker:
+                    continue
+                if child.is_symlink() or not child.resolve().is_relative_to(path):
+                    raise InstallError('准备目录包含外部链接，未删除文件。')
+                if child.is_dir():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink()
+            marker.unlink()
+            path.rmdir()
+    # The GUI removes its executing payload after Python exits.
+    preserved = Path(payload).resolve() if payload else None
+    if cache.exists():
+        for path in cache.iterdir():
+            if preserved and (path.resolve() == preserved or path.name in ('transaction.json','links')):
+                continue
+            if path.is_symlink() or not path.resolve().is_relative_to(cache):
+                raise InstallError('缓存目录包含外部链接，未删除文件。')
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        if not any(cache.iterdir()):
+            cache.rmdir()
 
 
 def remaining_space(payload, staging, cache):
@@ -228,6 +298,7 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
         raise InstallError('另一个安装窗口正在工作，请等待它结束后再试。') from None
     try:
         target, staging = base / VERSION, base / (VERSION + '.installing')
+        state = begin_transaction(base,cache)
         manifest_path = payload / 'payload-manifest.json'
         manifest_digest = sha(manifest_path)
         if target.exists():
@@ -250,7 +321,12 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
             source = (payload / item['path']).resolve()
             if not source.is_relative_to(payload) or not source.is_file() or sha(source) != item['sha256']:
                 raise InstallError('安装包资源校验失败。请重新下载官方安装包。')
+        if staging.exists():
+            # A previous interrupted transaction must be cleaned by its own journal,
+            # rather than taking ownership of a directory from another attempt.
+            raise InstallError('准备目录已有其它文件，请先完成上次安装的清理。')
         staging.mkdir(exist_ok=True)
+        (staging / '.setup-owned.json').write_text(json.dumps(state),encoding='utf-8')
         # Copy only public build-manifest entries; retries never copy user data.
         for item in manifest['files']:
             source, destination = payload / item['path'], staging / item['path']
@@ -341,19 +417,35 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--payload', type=Path, required=True)
     parser.add_argument('--base', type=Path, default=Path(os.environ['LOCALAPPDATA']) / 'Programs/AiClimb')
-    parser.add_argument('--cache', type=Path, default=Path(os.environ['LOCALAPPDATA']) / 'ClimbSetup' / VERSION)
+    parser.add_argument('--cache', type=Path, default=Path(os.environ['LOCALAPPDATA']) / 'ClimbSetup' / '0.1.16')
     parser.add_argument('--no-shortcuts', action='store_true')
     parser.add_argument('--skip-webview', action='store_true', help='Developer verification only')
+    parser.add_argument('--gate', help='Native process-job start gate')
     args = parser.parse_args()
+    if args.gate:
+        kernel = ctypes.WinDLL('kernel32',use_last_error=True)
+        kernel.OpenEventW.argtypes = [ctypes.c_uint32,ctypes.c_bool,ctypes.c_wchar_p]
+        kernel.OpenEventW.restype = ctypes.c_void_p
+        kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p,ctypes.c_uint32]
+        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = kernel.OpenEventW(0x100000,False,args.gate)
+        if not handle or kernel.WaitForSingleObject(handle,60000) != 0:
+            raise SystemExit('Installer start gate failed')
+        kernel.CloseHandle(handle)
     try:
         install(args.payload,args.base,args.cache,not args.no_shortcuts,not args.skip_webview)
     except Exception as exc:
-        detail = str(exc) if isinstance(exc, InstallError) else '安装未完成。请点击重试；仍失败时请在项目 Issues 提交安装日志。'
-        args.cache.mkdir(parents=True,exist_ok=True)
-        with (args.cache / '安装日志.txt').open('a',encoding='utf-8') as log:
-            import traceback
-            traceback.print_exc(file=log)
-        event(0, '安装未完成', detail, error=True)
+        import traceback
+        log = args.cache / '安装日志.txt'
+        diagnostics = (log.read_text('utf-8',errors='replace')[-250000:] if log.is_file() else '') + traceback.format_exc()
+        detail = str(exc) if isinstance(exc, InstallError) else '安装未完成，请查看日志后重新安装。'
+        try:
+            rollback(args.base,args.cache,args.payload)
+            detail += ' 本次安装文件已清理。'
+        except Exception:
+            diagnostics += traceback.format_exc()
+            detail += ' 清理未完成，请点击取消安装继续清理。'
+        event(0, '安装未完成', detail, error=True, log=diagnostics)
         return 1
     return 0
 

@@ -4,13 +4,13 @@
 
 ## 流程
 
-`WindowsApp.cs` 使用原生窗口，按系统 DPI 排版。首屏只有产品名、用途、空间提示和安装按钮。Python 输出结构化事件，窗口显示当前阶段、耗时、下载量和中文失败处理；出错可重试。
+`WindowsApp.cs` 使用原生窗口，按系统 DPI 排版。首屏显示产品名、用途、空间提示与操作。主按钮右侧突出，停止与取消为左侧灰色次要操作。Python 输出结构化事件，窗口显示当前阶段、耗时、下载量和中文失败处理；停止、取消及失败自动回退本次安装；清理未完成时保留「继续清理」，不显示已清理成功。
 
-资源在 `%LOCALAPPDATA%\ClimbSetup\<版本>` 展开，逐项校验。独立环境准备在 `%LOCALAPPDATA%\Programs\AiClimb\<版本>.installing`，Windows 依赖版本固定。官方 CPU Torch wheel 校验后在本机剔除编译用静态库及头文件，不再分发这个精简 wheel。用户无需编译器。
+资源在 `%LOCALAPPDATA%\ClimbSetup\0.1.16` 展开，逐项校验。独立环境准备在 `%LOCALAPPDATA%\Programs\AiClimb\<版本>.installing`，Windows 依赖版本固定。官方 CPU Torch wheel 校验后在本机剔除编译用静态库及头文件，不再分发这个精简 wheel。用户无需编译器。
 
-模型从作者 Kaggle / OpenMMLab 获取并校验，支持接续下载；来源限制访问时停止。缺窗口组件时下载微软 WebView2，验证 Authenticode 签名后安装。
+模型从作者 Kaggle / OpenMMLab 获取并校验。同一次尝试中的短暂下载中断支持自动接续；最终失败后清理下载文件，下次重新安装。来源限制访问时停止。缺窗口组件时下载微软 WebView2，验证 Authenticode 签名后安装。
 
-完成前实际加载模型、执行合成推理、检查视频组件与应用入口。准备目录改名为最终版本，创建「攀岩助手（公开版）」快捷方式。成功清理下载缓存，失败保留供重试。个人资料在独立 AiClimbingCommunity，不接触内部 `.local`。原生启动器用当前用户互斥锁避免重复打开；源码直接运行仍应避免多个进程共用资料。
+完成前实际加载模型、执行合成推理、检查视频组件与应用入口。准备目录改名为最终版本，创建「攀岩助手（公开版）」快捷方式。成功清理全部临时文件。失败、停止或取消结束自身 Windows Job 中的安装子进程后，依据本次 transaction.json 和 .setup-owned.json 归属标记删除环境、模型、新程序目录和缓存；已有安装与个人资料保留。文件被占用时保留归属标记以便继续清理。快捷方式更新前备份，回退时恢复旧链接或删除本次新建链接。个人资料在独立 AiClimbingCommunity，不接触内部 `.local`。原生启动器用当前用户互斥锁避免重复打开；源码直接运行仍应避免多个进程共用资料。
 
 ## 构建输入与方法
 
@@ -32,4 +32,8 @@ Detectron2 重建使用 `installer/rebuild_detectron.py`，在 VS 2022 x64 Nativ
 
 公开 CI 检查源码、前端和安装引擎的下载接续、校验、来源错误、资料目录保护、Torch 精简与 RECORD。Windows 本机验证见 VALIDATION.md；不把单机结果当跨电脑或专业准确率验收。
 
-安装日志：`%LOCALAPPDATA%\ClimbSetup\<版本>\安装日志.txt`。启动日志：`%LOCALAPPDATA%\AiClimbingCommunitySetup\启动日志.txt`。反馈前先脱敏，不上传照片、视频、密钥或整份资料目录。
+安装期间日志暂存于本次缓存；结束时读入内存并删除缓存，在「查看日志」窗口查看与复制。关闭窗口后不自动留日志文件。启动日志：`%LOCALAPPDATA%\AiClimbingCommunitySetup\启动日志.txt`。反馈前先脱敏，不上传照片、视频、密钥或整份资料目录。
+
+## Windows 路径与进程保护
+
+原生安装器显式向引擎传入 KnownFolder 得到的程序与缓存路径，并固定运行环境的 LOCALAPPDATA，避免继承宿主 MSIX 虚拟目录。缓存版本目录缩短，依赖构建临时目录使用 t。后台引擎在命名事件上等待，加入本次 Job 后才获准继续，避免子进程先于隔离启动。停止关闭 Job 中的进程，不按 python 等名称结束其它程序。微软 WebView2 属于共享系统组件，已有组件不卸载；安装器自身下载文件会清理。

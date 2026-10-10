@@ -5,7 +5,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
-from installer.engine import download, safe_extract, InstallError, install, remaining_space, INSTALL_PEAK_BYTES
+import json
+from installer.engine import download, safe_extract, InstallError, install, remaining_space, INSTALL_PEAK_BYTES, begin_transaction, rollback, VERSION
 
 
 class Response(io.BytesIO):
@@ -19,6 +20,60 @@ class Response(io.BytesIO):
 
 
 class InstallerTests(unittest.TestCase):
+    def test_failed_install_removes_environment_models_and_downloads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);base=root/'Programs';cache=root/'Cache'
+            base.mkdir();cache.mkdir();state=begin_transaction(base,cache)
+            stage=base/(VERSION+'.installing');stage.mkdir()
+            (stage/'.setup-owned.json').write_text(json.dumps(state))
+            for name in ('runtime/python.exe','models/weights.onnx'):
+                path=stage/name;path.parent.mkdir(exist_ok=True);path.write_bytes(b'partial')
+            (cache/'download.zip.part').write_bytes(b'partial')
+            data=root/'AiClimbingCommunity';data.mkdir();(data/'photo.jpg').write_bytes(b'keep')
+            rollback(base,cache)
+            self.assertEqual(list(base.iterdir()),[]);self.assertFalse(cache.exists())
+            self.assertEqual((data/'photo.jpg').read_bytes(),b'keep')
+
+    def test_cancel_after_rename_removes_new_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp)/'Programs';cache=Path(tmp)/'Cache';base.mkdir();cache.mkdir()
+            state=begin_transaction(base,cache);target=base/VERSION;target.mkdir()
+            (target/'.setup-owned.json').write_text(json.dumps(state))
+            (target/'installation.json').write_text('{}')
+            rollback(base,cache);self.assertFalse(target.exists());self.assertFalse(cache.exists())
+
+    def test_existing_app_and_old_version_survive_failed_reinstall(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp)/'Programs';cache=Path(tmp)/'Cache';base.mkdir();cache.mkdir()
+            target=base/VERSION;target.mkdir();(target/'app.exe').write_bytes(b'keep')
+            old=base/'previous-version';old.mkdir();(old/'app.exe').write_bytes(b'old')
+            begin_transaction(base,cache);rollback(base,cache)
+            self.assertEqual((target/'app.exe').read_bytes(),b'keep')
+            self.assertEqual((old/'app.exe').read_bytes(),b'old');self.assertFalse(cache.exists())
+
+    def test_foreign_marker_blocks_cleanup_without_deleting_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp)/'Programs';cache=Path(tmp)/'Cache';base.mkdir();cache.mkdir()
+            state=begin_transaction(base,cache);state['token']='another-attempt'
+            stage=base/(VERSION+'.installing');stage.mkdir();(stage/'.setup-owned.json').write_text(json.dumps(state))
+            (stage/'keep').write_text('keep')
+            with self.assertRaises(InstallError):rollback(base,cache)
+            self.assertEqual((stage/'keep').read_text(),'keep');self.assertTrue((cache/'transaction.json').exists())
+
+    def test_gui_payload_and_journal_remain_until_native_process_exits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp)/'Programs';cache=Path(tmp)/'Cache';base.mkdir();cache.mkdir()
+            begin_transaction(base,cache);payload=cache/'payload';payload.mkdir();(payload/'python.exe').write_bytes(b'executing')
+            (cache/'download.part').write_bytes(b'partial');rollback(base,cache,payload)
+            self.assertTrue((payload/'python.exe').exists());self.assertTrue((cache/'transaction.json').exists())
+            self.assertFalse((cache/'download.part').exists())
+
+    def test_cleanup_refuses_personal_data_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)/'AiClimbingCommunity';data.mkdir();(data/'video.mp4').write_bytes(b'keep')
+            with self.assertRaises(InstallError):rollback(Path(tmp)/'Programs',data)
+            self.assertEqual((data/'video.mp4').read_bytes(),b'keep')
+
     def test_retry_space_accounts_for_prepared_files_but_not_invalid_downloads(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

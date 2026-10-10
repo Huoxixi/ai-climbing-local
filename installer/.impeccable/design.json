@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-10T12:21:26+08:00",
+  "generatedAt": "2026-10-10T13:21:55+08:00",
   "title": "Design System: 攀岩助手中文安装器",
   "extensions": {
     "colorMeta": {
@@ -28,10 +28,18 @@
       "css": ".ds-button-primary { background: #edcb52; color: #202020; width: 140px; height: 38px; border: 0; border-radius: 0; font-family: 'Microsoft YaHei UI', sans-serif; font-size: 9pt; font-weight: 400; } .ds-button-primary:focus-visible { outline: auto; }"
     },
     {
+      "name": "次要操作按钮",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "操作行左侧的原生灰色按钮示意，用于停止或取消；清理完成后决定留在窗口或退出。",
+      "html": "<button class=\"ds-button-secondary\" type=\"button\">取消安装</button>",
+      "css": ".ds-button-secondary { background: #f7f7f7; color: #202020; width: 90px; height: 38px; border: 0; border-radius: 0; font-family: 'Microsoft YaHei UI', sans-serif; font-size: 9pt; font-weight: 400; } .ds-button-secondary:focus-visible { outline: auto; }"
+    },
+    {
       "name": "次要入口",
       "kind": "custom",
       "refersTo": "link-secondary",
-      "description": "原生 LinkLabel 的网页示意；首次提供安装说明，开始安装后打开日志目录。",
+      "description": "原生 LinkLabel 的网页示意；首次提供安装说明，开始后显示内存日志对话框，不新建缓存目录。",
       "html": "<a class=\"ds-link-secondary\" href=\"#\">安装说明</a>",
       "css": ".ds-link-secondary { color: #464646; font-family: 'Microsoft YaHei UI', sans-serif; font-size: 9pt; font-weight: 400; text-decoration: underline; } .ds-link-secondary:focus-visible { outline: auto; }"
     }
@@ -42,7 +50,7 @@
     "keyCharacteristics": [
       "单列、短文案、一个黄色主要操作。",
       "当前步骤与简短说明分开，进度条细而明确。",
-      "失败说明和重试留在原窗口，详细日志另行打开。"
+      "停止、取消与失败明确显示清理状态，详细日志在内存对话框中打开。"
     ],
     "rules": [
       { "name": "The Text Status Rule", "body": "状态必须有中文文字与原生进度控件表达，颜色不能成为唯一信号。", "section": "colors" },
@@ -52,13 +60,15 @@
       "Do 沿用 App 黄色、灰白底色、深色正文及原生中文字体。",
       "Do 使用系统 DPI 缩放逻辑尺寸，保留原生键盘焦点。",
       "Do 将当前步骤、失败原因及下一步操作写成简短中文。",
-      "Do 保持一个右侧主要操作，并将详细日志放在次要入口。"
+      "Do 保持一个右侧主要操作，将停止与取消放在左侧次要位置。",
+      "Do 通过次要入口在内存对话框中显示日志，清理状态与下一步操作留在原窗口。"
     ],
     "donts": [
       "Don't 在首屏展开五步长说明或技术配置选项。",
       "Don't 用颜色单独表达状态，或把阶段进度冒充总下载百分比。",
       "Don't 为现有原生界面添加无依据的阴影、圆角、悬停动画或新强调色。",
-      "Don't 将当前空间实测数字变成适用于所有电脑的固定承诺。"
+      "Don't 将当前空间实测数字变成适用于所有电脑的固定承诺。",
+      "Don't 在清理成功前宣告安装文件已清理，或通过查看日志重建安装缓存。"
     ]
   }
 }
