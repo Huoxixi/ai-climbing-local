@@ -4,7 +4,7 @@
 
 **当前公开版本：2026-10-10 源码预览版，来自本地 App `0.1.14-replay.20261009`。** 本仓库包含当前工作区更新，原始提交基线与导出范围见 [SOURCE_SNAPSHOT.json](SOURCE_SNAPSHOT.json)。本地版关闭云端收费 API，不需要填写 AI 密钥。
 
-这是一份可以安装后运行的源码包，**不是已完成独立电脑验收的免安装 EXE**。骨架模式可由安装脚本准备；照片岩点识别还需要自行取得合法的专项模型权重并安装 Detectron2。下载源码 ZIP 不会包含模型、Python、Node.js 或个人素材。完整限制见下文和 [模型安装说明](docs/MODELS.md)。
+发布页提供**源码＋预构建界面包**，安装后可运行；它不是已完成独立电脑验收的免安装 EXE。骨架模式可由安装脚本准备；照片岩点识别还需要自行取得合法的专项模型权重并安装 Detectron2。下载包不会包含模型、Python、Node.js 或个人素材。完整限制见下文和 [模型安装说明](docs/MODELS.md)。
 
 ## 目录
 
@@ -43,7 +43,9 @@
 
 ### 1. 获取源码
 
-在 GitHub 点击 **Code → Download ZIP** 并解压，或：
+**普通用户推荐：** 前往 [Releases](https://github.com/Huoxixi/ai-climbing-local/releases)，下载 `AiClimbing-local-*.zip`，解压后双击 `install.cmd`，完成后双击 `start.cmd`。这个压缩包带已构建界面，首次安装无需 Node.js。
+
+**开发者：** 在 GitHub 点击 **Code → Download ZIP** 并解压，或：
 
 ```powershell
 git clone https://github.com/Huoxixi/ai-climbing-local.git
@@ -57,7 +59,7 @@ cd ai-climbing-local
 当前主支持平台为 **Windows 10/11 x64**。
 
 - [Python 3.12 x64](https://www.python.org/downloads/windows/)：安装 Python Launcher；自定义 Python 路径也可通过 `setup.ps1 -Python` 指定。
-- [Node.js](https://nodejs.org/en/download/)：22.12+ 的 22.x 或 24+，包含 npm。
+- [Node.js](https://nodejs.org/en/download/)：仅开发者源码构建需要；22.12+ 的 22.x 或 24+，包含 npm。使用发布页的预构建界面包可跳过。
 - [Microsoft WebView2 Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)：桌面窗口需要；浏览器模式可不依赖它。
 - 首次安装需要联网下载依赖与约 265 MB 的姿态模型，实际下载体积还包括依赖、压缩包和视频编码工具。处理速度及内存占用取决于视频长度、分辨率和电脑配置；尚未给出经过跨机器验收的最低配置。
 
@@ -69,7 +71,7 @@ cd ai-climbing-local
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-脚本在本目录创建 `.venv`，安装依赖，从 OpenMMLab 官方地址下载并校验 RTMW/YOLOX 模型，再构建本地抱石界面。它不读取旧开发目录，不复制你的照片或密钥，不请求任何收费 AI 服务。
+脚本在本目录创建 `.venv`，安装依赖，从 OpenMMLab 官方地址下载并校验 RTMW/YOLOX 模型。发布包的预构建界面通过清单校验后直接使用；只有纯源码下载或 `-RebuildFrontend` 才需要 Node.js 构建。脚本不读取旧开发目录，不复制你的照片或密钥，不请求任何收费 AI 服务。
 
 自定义 Python：
 

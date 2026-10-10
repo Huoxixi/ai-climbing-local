@@ -1,6 +1,7 @@
 .venv/
 node_modules/
 frontend/dist/
+frontend-manifest.json
 __pycache__/
 *.pyc
 *.pyd
