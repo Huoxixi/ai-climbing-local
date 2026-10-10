@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-10T13:21:55+08:00",
+  "generatedAt": "2026-10-10T13:58:12+08:00",
   "title": "Design System: 攀岩助手中文安装器",
   "extensions": {
     "colorMeta": {
@@ -23,7 +23,7 @@
       "name": "主要按钮",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "现有 WinForms 主要按钮的独立网页示意；实际焦点、禁用及悬停绘制由 Windows 提供。",
+      "description": "现有 WinForms 主要按钮的独立网页示意；清理未完成时优先继续清理，最终清理期间禁用。实际焦点、禁用及悬停绘制由 Windows 提供。",
       "html": "<button class=\"ds-button-primary\" type=\"button\">开始安装</button>",
       "css": ".ds-button-primary { background: #edcb52; color: #202020; width: 140px; height: 38px; border: 0; border-radius: 0; font-family: 'Microsoft YaHei UI', sans-serif; font-size: 9pt; font-weight: 400; } .ds-button-primary:focus-visible { outline: auto; }"
     },
@@ -31,7 +31,7 @@
       "name": "次要操作按钮",
       "kind": "button",
       "refersTo": "button-secondary",
-      "description": "操作行左侧的原生灰色按钮示意，用于停止或取消；清理完成后决定留在窗口或退出。",
+      "description": "操作行左侧的原生灰色按钮示意，用于停止或取消；最终清理期间禁用。此时 X 等待清理后关闭，保留已经安装成功的 App。",
       "html": "<button class=\"ds-button-secondary\" type=\"button\">取消安装</button>",
       "css": ".ds-button-secondary { background: #f7f7f7; color: #202020; width: 90px; height: 38px; border: 0; border-radius: 0; font-family: 'Microsoft YaHei UI', sans-serif; font-size: 9pt; font-weight: 400; } .ds-button-secondary:focus-visible { outline: auto; }"
     },
