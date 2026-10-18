@@ -18,7 +18,9 @@ Apache-2.0 LICENSE are preserved under vendor/MobileSAM. It downloads the upstre
 mobile_sam.pt checkpoint directly and verifies SHA-256
 6dbb90523a35330fedd7f1d3dfc66f995213d81b29a5ca8108dbcdd4e37d6c2f;
 the checkpoint is not mirrored in Git or bundled in setup. Original model terms
-apply. timm 0.9.16 is installed from PyPI for local PyTorch layer helpers only;
+apply. timm 0.9.16 is downloaded from its original PyPI wheel URL with fixed SHA-256
+bf5704014476ab011589d3c14172ee4c901fd18f9110a928019cac5be2945914 and
+installed locally for PyTorch layer helpers only;
 its original Apache-2.0 license stays in the installed package. The app does not
 use its model-hub or safetensors features, and those optional features are not
 prepared by this installer. The existing tested PyTorch runtime remains pinned.
