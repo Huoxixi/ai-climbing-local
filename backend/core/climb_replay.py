@@ -45,7 +45,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from core.chunked_upload import ChunkUploadError, ChunkUploadStore
 from core.photo_route_analysis import _climbing_model_masks_batch
-from core.photo_route_colors import TWELVE_COLOR_VERSION, classify_mask_color, lab_color_name, mask_sample_distance
+from core.photo_route_colors import ROUTE_COLOR_NAMES, lab_color_name
+from core.replay_hold_colors import REPLAY_COLOUR_VERSION, observe_hold_colour, region_sample_distance, sample_clicked_hold
+from core.replay_hold_evidence import material_observation, sample_compatible_group, colour_support, boundary_quality
 from core.photo_route_inference_lock import serialized_inference
 from core.replay_hold_fusion import align_pose_record, align_to_reference, box_iou, fuse_hold_detections, match_confirmed_route, polygon_bbox, select_sampled_route_holds, transform_polygon
 from core.replay_segments import build_segments, compare_segments, effective_segments, measured_joint_angles
@@ -80,12 +82,16 @@ REPLAY_OVERLAY_MEDIA_KIND = "overlay_video"
 REPLAY_REVIEWED_OVERLAY_MEDIA_KIND = "reviewed_overlay_video"
 REPLAY_REFERENCE_MEDIA_KIND = "wall_reference"
 REPLAY_REFERENCE_FILENAME = "replay-reference.png"
-REPLAY_COLOR_SAMPLE_MAX_LAB_DISTANCE = 34.0
+REPLAY_COLOR_SAMPLE_MAX_LAB_DISTANCE = 60.0
 REPLAY_VIDEO_MIME_TYPES = frozenset({
     "video/mp4", "video/quicktime", "video/x-m4v", "video/webm",
-    "video/3gpp", "video/3gpp2", "video/x-matroska",
+    "video/3gpp", "video/3gpp2", "video/x-matroska", "video/x-msvideo", "video/avi",
+    "video/mpeg", "video/mp2t", "video/x-ms-wmv", "video/x-ms-asf", "video/x-flv",
+    "video/ogg", "application/mxf",
 })
-REPLAY_VIDEO_SUFFIXES = frozenset({".mp4", ".m4v", ".mov", ".webm", ".3gp", ".3g2", ".mkv"})
+REPLAY_VIDEO_SUFFIXES = frozenset({".mp4", ".m4v", ".mov", ".webm", ".3gp", ".3g2", ".mkv",
+    ".avi", ".mpg", ".mpeg", ".mpe", ".ts", ".mts", ".m2ts", ".m2t", ".wmv", ".asf",
+    ".flv", ".f4v", ".vob", ".ogv", ".ogg", ".mxf", ".divx"})
 
 
 class ReplayConfigurationError(RuntimeError):
@@ -310,8 +316,8 @@ def validate_video_upload_type(filename: str, content_type: str) -> bool:
     """Accept common mobile containers without trusting MIME metadata alone."""
     suffix = Path(filename or "").suffix.lower()
     mime = (content_type or "").split(";", 1)[0].strip().lower()
-    if mime not in REPLAY_VIDEO_MIME_TYPES and suffix not in REPLAY_VIDEO_SUFFIXES:
-        raise ValueError("支持 MP4、MOV、M4V、WebM、3GP 和 MKV 视频")
+    if not mime.startswith('video/') and mime not in REPLAY_VIDEO_MIME_TYPES and suffix not in REPLAY_VIDEO_SUFFIXES:
+        raise ValueError("请选择常见视频文件，如 MP4、MOV、MKV、AVI、WebM、MTS、MPEG 或 WMV。")
     return suffix == ".mp4" and mime in {"", "application/octet-stream", "video/mp4"}
 
 
@@ -518,19 +524,32 @@ def build_pose_samples(records: list[dict], video_info: VideoInfo) -> list[dict]
         samples.append({
             **({"wholebody": copy.deepcopy(record["wholebody"])} if record.get("wholebody") else {}),
             **({"pose_evidence": copy.deepcopy(record["pose_evidence"])} if record.get("pose_evidence") else {}),
+            **({"joint_observations": copy.deepcopy(record["joint_observations"])} if record.get("joint_observations") else {}),
+            **({"joint_eligibility": copy.deepcopy(record["joint_eligibility"])} if record.get("joint_eligibility") is not None else {}),
+            **({"initial_wholebody_observation": copy.deepcopy(record["initial_wholebody_observation"]),
+                "pose_revision": copy.deepcopy(record["pose_revision"])} if record.get("pose_revision") else {}),
             "sample_index": int(record.get("frame_id") or 0),
             "source_frame_id": source_frame,
             "time_seconds": round(source_frame / max(video_info.fps, 1e-9), 6),
             "wall_alignment": record.get("wall_alignment", "unknown"),
             "wall_alignment_diagnostics": record.get("wall_alignment_diagnostics") or {},
             "wall_reference_transform": record.get("wall_reference_transform"),
-            "observed": bool(usable_scores),
-            "confidence": round(float(np.mean(usable_scores)), 6) if usable_scores else 0.0,
+            "observed": bool(len(record['joint_eligibility'])==17
+                and all(isinstance(v,bool) for v in record['joint_eligibility']) and any(record['joint_eligibility']))
+                if record.get('joint_eligibility') is not None else bool(usable_scores),
+            **({'confidence_basis':'not_calibrated',
+                'mean_model_response':round(float(np.mean(scores)),6) if scores else None} if record.get('joint_eligibility') is not None else {}),
+            "confidence": None if record.get('joint_eligibility') is not None else round(float(np.mean(usable_scores)), 6) if usable_scores else 0.0,
             "kpts_xy": record.get("kpts_xy") or [[0.0, 0.0] for _ in range(17)],
             "kpts_score": scores or [0.0] * 17,
             "bbox_xywh": record.get("bbox_xywh") or [0.0, 0.0, 0.0, 0.0],
             "joint_angles_2d": measured_joint_angles(
-                record.get("kpts_xy") or [], scores, video_info.width, video_info.height),
+                record.get("kpts_xy") or [],
+                [1. if eligible else 0. for eligible in record['joint_eligibility']]
+                    if record.get('joint_eligibility') is not None and len(record['joint_eligibility'])==17
+                    and all(isinstance(v,bool) for v in record['joint_eligibility'])
+                    else [0.]*17 if record.get('joint_eligibility') is not None else scores,
+                video_info.width, video_info.height),
         })
     return samples
 
@@ -1850,7 +1869,7 @@ class ClimbReplayStore:
             if candidate_index < 0 or candidate_index >= len(candidates):
                 raise HTTPException(404, "未找到候选岩点")
             candidate = candidates[candidate_index]
-            if (candidate.get("contour_source") != "climbing_model_native_mask"
+            if (candidate.get("contour_source") not in {'climbing_model_native_mask','model_guided_mobilesam_mask'}
                     or int(candidate.get("appearances") or 0) < 2
                     or len(candidate.get("polygon") or []) < 3):
                 raise HTTPException(422, "这个候选缺少稳定的模型轮廓，不能直接补入")
@@ -2139,11 +2158,10 @@ class ClimbReplayStore:
             source = self._media_path(job_id, job, "source_video")
             if not source.is_file():
                 raise HTTPException(409, "原视频文件不存在")
-            if sample.get("rgb"):
+            sample_group = ReplayAnalyzerBase._route_colour(str((result.get("route") or {}).get("color") or job.get("route_color") or ""))
+            if sample_group not in ROUTE_COLOR_NAMES and sample.get("rgb"):
                 sample_lab = cv2.cvtColor(np.uint8([[sample["rgb"]]]), cv2.COLOR_RGB2LAB)[0, 0]
                 sample_group = lab_color_name(sample_lab, twelve_colors=True)
-            else:
-                sample_group = ReplayAnalyzerBase._route_colour(str((result.get("route") or {}).get("color") or job.get("route_color") or ""))
             original_holds = result.get("holds") or []
             all_holds = [*original_holds, *(result.get("hold_candidates") or [])]
             selected, candidates, evidence = select_sampled_route_holds(
@@ -2231,7 +2249,9 @@ class ClimbReplayStore:
         finally:
             cap.release()
         sample_fps = float((result.get("analysis") or {}).get("sampling", {}).get("effective_fps") or 1)
-        attempt = ReplayAnalyzerBase._contacts(records, result["holds"], sample_fps, source_fps=video.fps)
+        contact_trace = []
+        attempt = ReplayAnalyzerBase._contacts(records, result["holds"], sample_fps, source_fps=video.fps, trace=contact_trace)
+        attempt['contact_evidence'] = {'version':1,'basis':'projected_joint_and_duration_not_physical_contact_proof','frames':contact_trace}
         add_attempt_source_times(attempt, samples, video)
         attempt["action_steps"] = build_action_steps(attempt.get("contacts") or [])
         result["attempt"] = attempt
@@ -3412,6 +3432,8 @@ class ClimbReplayManager:
                               finished_at=utcnow())
 
     def close(self) -> None:
+        if getattr(self.store, 'prepared_previews', None):
+            self.store.prepared_previews.close()
         if getattr(self.store, "action_manager", None):
             self.store.action_manager.close()
         if getattr(self.store, "template_manager", None):
@@ -3524,6 +3546,10 @@ class ReplayAnalyzerBase:
         frame_budget = int(profile) if profile in {"6", "8"} else 4
         indices = {min(total - 1, int(round(value))) for value in np.linspace(
             total * (.02 if frame_budget > 4 else .08), total * (.98 if frame_budget > 4 else .92), frame_budget)}
+        if profile == "seconds":
+            # Offline coverage experiment; default remains four frames.
+            indices.update(min(total-1,round(second*info.fps))
+                           for second in range(math.ceil(info.duration_seconds)))
         if sample and sample.get("source") == "video" and sample.get("point_xy") is not None:
             trim = float(sample.get("trim_start_seconds") or 0)
             sample_index = round((float(sample.get("time_seconds") or 0) - trim) * info.fps)
@@ -3568,18 +3594,28 @@ class ReplayAnalyzerBase:
     def _video_holds(cls, *, frames: list[tuple[int, np.ndarray]], route_color: str,
                      route_color_sample: dict | None, saved_route_reference: dict | None,
                      deadline: float, progress: Callable[[str, int], None],
-                     cancelled: Callable[[], bool]) -> tuple[list[dict], list[dict], dict, dict | None, str]:
+                     cancelled: Callable[[], bool],
+                     trace: list[dict] | None = None,
+                     reference_source_frame: int | None = None,
+                     source_video: Path | None = None) -> tuple[list[dict], list[dict], dict, dict | None, str]:
         if not frames:
             raise RuntimeError("没有从视频中读取到有效画面")
         images = [frame for _, frame in frames]
         sharpness = [cv2.Laplacian(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()
                      for frame in images]
         reference_index = int(np.argmax(sharpness))
+        if reference_source_frame is not None:
+            reference_index = next((index for index,item in enumerate(frames)
+                                    if item[0]==reference_source_frame),-1)
+            if reference_index < 0:
+                raise ValueError("Frozen reference frame is missing from experiment")
         requested_frame = route_color_sample.get("prepared_frame_index") if route_color_sample else None
         if requested_frame is not None:
             reference_index = next((index for index, item in enumerate(frames)
                                     if item[0] == requested_frame), reference_index)
         reference = images[reference_index]
+        from core.replay_hold_fusion import image_content_bounds
+        content_bounds = image_content_bounds(reference)
         height, width = reference.shape[:2]
         transformations: list[np.ndarray | None] = []
         registrations = []
@@ -3596,10 +3632,13 @@ class ReplayAnalyzerBase:
         motion_px = max((float(np.median(np.linalg.norm(
             cv2.perspectiveTransform(corners, matrix) - corners, axis=2)))
             for matrix in transformations if matrix is not None), default=0.0)
+        native_metadata=[]
         outputs, model_version = _climbing_model_masks_batch(
             images, deadline, cancelled,
             lambda stage, value: progress(stage, 16 + round(max(0, value - 20) * .37)),
             pack_masks=True,
+            reuse_model=True,
+            include_volumes=True, native_metadata=native_metadata,
         )
 
         def restore_mask(encoded: np.ndarray, frame: np.ndarray) -> np.ndarray:
@@ -3619,67 +3658,88 @@ class ReplayAnalyzerBase:
             px = min(frame.shape[1] - 1, int(actual_sample["point_xy"][0] * frame.shape[1]))
             py = min(frame.shape[0] - 1, int(actual_sample["point_xy"][1] * frame.shape[0]))
             masks, _ = outputs[sample_frame_index]
-            matches = []
-            for encoded in masks:
-                mask = restore_mask(encoded, frame)
-                if mask[py, px] > 0:
-                    matches.append(mask)
-            if not matches:
-                raise ValueError("所点位置未落在识别出的岩点内，请选择清晰且未被遮挡的岩点")
-            mask = min(matches, key=lambda item: int(np.count_nonzero(item)))
+            mask, rgb, sample_region = sample_clicked_hold(
+                frame, [restore_mask(encoded, frame) for encoded in masks], (px, py))
             sample_polygon = native_mask_polygon(mask)
             if len(sample_polygon) >= 3 and transformations[sample_frame_index] is not None:
                 sampled_bbox = polygon_bbox(transform_polygon(
                     [[float(point[0][0]), float(point[0][1])] for point in sample_polygon],
                     transformations[sample_frame_index], width, height))
-            interior = cv2.erode(mask, np.ones((5, 5), np.uint8))
-            pixels = frame[interior > 0]
-            if len(pixels) < 10:
-                pixels = frame[mask > 0]
-            rgb = np.median(pixels[:, ::-1], axis=0).astype(int).tolist()
             actual_sample.update(rgb=rgb, hex="#{:02x}{:02x}{:02x}".format(*rgb),
-                                 evidence="segmented_hold_interior", frame_index=frames[sample_frame_index][0])
+                                 evidence="segmented_hold_interior", frame_index=frames[sample_frame_index][0],
+                                 colour_region=sample_region)
         detections: list[list[dict]] = []
         target = cls._route_colour(route_color)
+        if target not in ROUTE_COLOR_NAMES and actual_sample and actual_sample.get('rgb'):
+            target = lab_color_name(cv2.cvtColor(np.uint8([[actual_sample['rgb']]]),
+                                               cv2.COLOR_RGB2LAB)[0, 0], twelve_colors=True)
         for frame_index, ((source_index, frame), (masks, scores), matrix) in enumerate(
                 zip(frames, outputs, transformations)):
             if matrix is None:
+                if trace is not None:
+                    trace.append({"stage": "registration", "source_frame": source_index,
+                                  "status": "rejected", "reason": registrations[frame_index].get("reason"),
+                                  "model_candidates": len(masks)})
+                detections.append([])
                 continue
             frame_holds = []
-            for encoded, score in zip(masks, scores):
+            for mask_index, (encoded, score) in enumerate(zip(masks, scores)):
+                observation_id = f"frame-{source_index}-mask-{mask_index}"
                 if cancelled():
                     raise ReplayCancelled()
                 mask = restore_mask(encoded, frame)
                 polygon = native_mask_polygon(mask)
                 if len(polygon) < 3:
+                    if trace is not None:
+                        trace.append({"observation_id": observation_id, "stage": "contour",
+                                      "status": "rejected", "reason": "invalid_native_contour"})
                     continue
                 source_polygon = [[float(point[0][0]), float(point[0][1])] for point in polygon]
                 mapped = transform_polygon(source_polygon, matrix, width, height)
                 bbox = polygon_bbox(mapped)
                 if bbox[2] <= 0 or bbox[3] <= 0:
+                    if trace is not None:
+                        trace.append({"observation_id": observation_id, "stage": "mapping",
+                                      "status": "rejected", "reason": "degenerate_mapped_contour"})
                     continue
-                colour = classify_mask_color(frame, mask, version=TWELVE_COLOR_VERSION)
-                if colour == "待确认":
-                    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)[mask > 0]
-                    if len(lab):
-                        colour = lab_color_name(np.median(lab, axis=0).astype(np.uint8), twelve_colors=True)
-                distance = mask_sample_distance(frame, mask, actual_sample["rgb"]) if actual_sample else None
-                candidate = distance <= REPLAY_COLOR_SAMPLE_MAX_LAB_DISTANCE if distance is not None else colour == target
+                colour, interior, colour_evidence = observe_hold_colour(frame, mask)
+                distance = region_sample_distance(frame, interior, actual_sample["rgb"]) if actual_sample else None
+                material=material_observation(colour_evidence,actual_sample['rgb'] if actual_sample else None)
+                colour=sample_compatible_group(colour,material,target)
+                support=colour_support(frame,interior,actual_sample['rgb'],colour,target,distance,
+                    colour_evidence=colour_evidence) if actual_sample else None
+                candidate = (distance is not None and np.isfinite(distance) and
+                             distance <= REPLAY_COLOR_SAMPLE_MAX_LAB_DISTANCE and colour == target
+                             if actual_sample else colour == target)
+                if support:candidate=support['qualified']
                 frame_holds.append({
                     "bbox": bbox, "polygon": mapped, "score": round(float(score), 4),
                     "color_group": colour, "color_source": actual_sample["source"] if actual_sample else "preset",
+                    "color_evidence": colour_evidence,
+                    "material_observation": material,
+                    "new_body_resolution":bool(colour_evidence.get('body_resolution')),
+                    "boundary_quality": boundary_quality(frame,mask),
+                    "colour_support":support,
+                    "native_class":native_metadata[frame_index]['classes'][mask_index] if frame_index<len(native_metadata) else 0,
                     "color_distance": round(distance, 4) if distance is not None else None,
                     "route_candidate": candidate, "route_candidate_reason": "color_sample" if actual_sample else "preset_color",
                     "identity_source": "multi_frame_geometry", "contour_source": "climbing_model_native_mask",
+                    "contour_complete": all(0 < point[0] < frame.shape[1] - 1 and
+                                            0 < point[1] < frame.shape[0] - 1 for point in source_polygon),
                     "contour_points": len(mapped), "source_frame": source_index,
+                    "observation_id": observation_id,
                 })
+                if trace is not None:
+                    trace.append({"stage": "mapping", "status": "retained", **frame_holds[-1]})
             detections.append(frame_holds)
-        all_holds = fuse_hold_detections(detections, color_distance_limit=REPLAY_COLOR_SAMPLE_MAX_LAB_DISTANCE)
+        all_holds = fuse_hold_detections(detections, color_distance_limit=REPLAY_COLOR_SAMPLE_MAX_LAB_DISTANCE,
+                                         sample_group=target, evidence_policy='material_boundary')
+        if trace is not None:
+            trace.extend({"stage": "fusion", "status": "retained", **hold} for hold in all_holds)
         if sampled_bbox is not None:
             for hold in all_holds:
                 if cls._iou(hold["bbox"], sampled_bbox) > .5:
                     hold["identity_source"] = "user_sampled_hold"
-                    hold["route_candidate"] = True
                     hold["route_candidate_reason"] = "user_sampled_hold"
                     break
         projected = []
@@ -3712,21 +3772,92 @@ class ReplayAnalyzerBase:
         else:
             minimum_appearances = 2 if sum(item is not None for item in transformations) >= 2 else 1
             if actual_sample and actual_sample.get("rgb"):
-                sample_rgb = np.uint8([[actual_sample["rgb"]]])
-                sample_lab = cv2.cvtColor(sample_rgb, cv2.COLOR_RGB2LAB)[0, 0]
-                sample_group = lab_color_name(sample_lab, twelve_colors=True)
+                sample_group = target
                 holds, candidates, sampled_selection = select_sampled_route_holds(
                     all_holds, sample_group=sample_group,
                     minimum_appearances=minimum_appearances,
+                    trace=trace,
+                    content_bounds=content_bounds,
                 )
                 selection = "sampled_colour_geometry_needs_review"
             else:
                 holds, candidates, sampled_selection = select_sampled_route_holds(
                     all_holds, sample_group=target,
                     minimum_appearances=minimum_appearances,
+                    trace=trace,
+                    content_bounds=content_bounds,
                 )
                 selection = "minimal_colour_geometry_needs_review"
             candidates.extend(item for item in remaining if item.get("appearances") == 0)
+        recovery=None
+        if not confirmed and actual_sample and actual_sample.get('rgb'):
+            from core.replay_hold_recovery import recover_hold_candidates
+            added,extra_rejected,recovery=recover_hold_candidates(frames=frames,matrices=transformations,
+                reference_frame=frames[reference_index][0],detections=detections,native_outputs=outputs,
+                all_holds=all_holds,existing=holds,sample_group=target,sample_rgb=actual_sample['rgb'],
+                model_fn=_climbing_model_masks_batch,polygon_fn=native_mask_polygon,
+                deadline=deadline,cancelled=cancelled,progress=progress,trace=trace)
+            holds.extend(added);candidates.extend(extra_rejected)
+        expansion = None
+        if not confirmed:
+            from core.replay_hold_expansion import expand_native_evidence, EXPANSION_VERSION
+            from core.replay_hold_resampling import resample_weak_candidates, refine_weak_candidates, refine_native_fragments
+            expansion = {'version': EXPANSION_VERSION, 'accepted_contours_preserved': True}
+            sample_rgb = actual_sample.get('rgb') if actual_sample else None
+            try:
+                additions, detail = expand_native_evidence(frames=frames, outputs=outputs,
+                    detections=detections, existing=holds, sample_group=target,
+                    sample_rgb=sample_rgb, trace=trace)
+                holds.extend(additions)
+                expansion.update(detail)
+            except (ReplayCancelled, InterruptedError):
+                raise
+            except (RuntimeError, ValueError, OSError, ImportError, TimeoutError) as exc:
+                expansion.update(status='native_expansion_unavailable', reason=type(exc).__name__, added=0)
+            try:
+                extra_frames, extra_outputs, extra_detections, resampling = resample_weak_candidates(
+                    source_video=source_video, frames=frames, outputs=outputs, detections=detections,
+                    existing=holds, sample_group=target, sample_rgb=sample_rgb,
+                    reference_frame=frames[reference_index][0], model_fn=_climbing_model_masks_batch,
+                    polygon_fn=native_mask_polygon, alignment_fn=align_to_reference,
+                    deadline=deadline, cancelled=cancelled, progress=progress)
+                expansion['resampling'] = resampling
+                if extra_frames:
+                    additions, detail = expand_native_evidence(frames=frames+extra_frames,
+                        outputs=outputs+extra_outputs, detections=detections+extra_detections,
+                        existing=holds, sample_group=target, sample_rgb=sample_rgb, trace=trace)
+                    holds.extend(additions)
+                    expansion['resampling_added'] = detail['added']
+                    expansion['added'] = expansion.get('added', 0)+detail['added']
+                    additions, refinement = refine_weak_candidates(frames=extra_frames,
+                        outputs=extra_outputs, detections=extra_detections, existing=holds,
+                        sample_group=target, sample_rgb=sample_rgb, reference=reference,
+                        alignment_fn=align_to_reference, polygon_fn=native_mask_polygon,
+                        deadline=deadline, cancelled=cancelled, progress=progress, trace=trace)
+                    holds.extend(additions)
+                    expansion['weak_refinement'] = refinement
+                    expansion['added'] += len(additions)
+            except (ReplayCancelled, InterruptedError):
+                raise
+            except (RuntimeError, ValueError, OSError, ImportError, TimeoutError) as exc:
+                expansion['resampling'] = {'reason':'additional_observation_unavailable',
+                    'error_type':type(exc).__name__, 'accepted_contours_preserved':True}
+            try:
+                budget=max(0,8-(expansion.get('weak_refinement') or {}).get('prompts',0))
+                additions, refinement = refine_native_fragments(frames=frames, outputs=outputs,
+                    detections=detections, existing=holds, sample_group=target,
+                    sample_rgb=sample_rgb, reference_frame=frames[reference_index][0],
+                    alignment_fn=align_to_reference, polygon_fn=native_mask_polygon,
+                    deadline=deadline, cancelled=cancelled, progress=progress,
+                    trace=trace, prompt_budget=budget)
+                holds.extend(additions)
+                expansion['native_fragment_refinement']=refinement
+                expansion['added']=expansion.get('added',0)+len(additions)
+            except (ReplayCancelled, InterruptedError):
+                raise
+            except (RuntimeError, ValueError, OSError, ImportError, TimeoutError) as exc:
+                expansion['native_fragment_refinement']={'status':'unavailable',
+                    'error_type':type(exc).__name__, 'accepted_contours_preserved':True}
         holds.sort(key=lambda hold: (-(hold["bbox"][1] + hold["bbox"][3] / 2), hold["bbox"][0]))
         for index, hold in enumerate(holds, 1):
             hold["id"] = index
@@ -3734,13 +3865,18 @@ class ReplayAnalyzerBase:
                        "frame_profile": os.getenv("CLIMB_REPLAY_HOLD_FRAME_PROFILE", "4"),
                        "raw_model_candidates_by_frame": [len(item[0]) for item in outputs],
                        "aligned_candidates_by_frame": [len(item) for item in detections],
+                       "sampled_source_frames": [item[0] for item in frames],
                        "frames_decoded": len(frames), "frames_aligned": sum(item is not None for item in transformations),
                        "registrations": registrations, "saved_route_registration": route_registration,
                        "camera_motion_px": round(motion_px, 2),
                        "confirmed_members_matched": sum(item.get("appearances", 0) > 0 for item in confirmed),
                        "confirmed_members_projected": sum(item.get("appearances", 0) == 0 for item in candidates),
-                       "all_candidates": len(all_holds), "sampled_selection": sampled_selection}
-        return holds, candidates, diagnostics, actual_sample, f"{model_version}+multiframe-aligned-v1"
+                       "all_candidates": len(all_holds), "sampled_selection": sampled_selection,
+                       "hold_colour_version": REPLAY_COLOUR_VERSION,
+                       "model_guided_recovery":recovery, "native_route_expansion":expansion}
+        version = f"{model_version}+multiframe-aligned-v1+{REPLAY_COLOUR_VERSION}"
+        if expansion is not None:version += '+'+expansion['version']
+        return holds, candidates, diagnostics, actual_sample, version
 
     @staticmethod
     def _jpeg(frame: np.ndarray) -> tuple[bytes, int, int]:
@@ -3792,9 +3928,17 @@ class ReplayAnalyzerBase:
         return bx - margin <= x <= bx + bw + margin and by - margin <= y <= by + bh + margin
 
     @classmethod
-    def _contacts(cls, records: list[dict], holds: list[dict], fps: float, *, source_fps: float | None = None) -> dict:
+    def _contacts(cls, records: list[dict], holds: list[dict], fps: float, *, source_fps: float | None = None,
+                  trace: list | None = None, diagnostic_policy: dict | None = None) -> dict:
+        # Offline one-variable comparisons share the production event/time engine.
+        # These policies are deliberately absent from user settings and defaults.
+        policy = diagnostic_policy or {}
+        margin = float(policy.get('margin', .02))
+        foot_offset = float(policy.get('foot_offset', .02))
+        minimum_score = float(policy.get('minimum_score', .5))
+        duration = float(policy.get('duration', .4))
         limbs = {"left_hand": 9, "right_hand": 10, "left_foot": 15, "right_foot": 16}
-        dwell = max(1, round(0.4 * fps))
+        dwell = max(1, round(duration * fps))
         records = sorted(records, key=lambda item: int(item.get("frame_id", -1)))
         current = {key: None for key in limbs}
         since = {key: 0 for key in limbs}
@@ -3830,14 +3974,54 @@ class ReplayAnalyzerBase:
                                 "y": round(float(np.mean([p[1] for p in torso])), 5)})
             active = {}
             for key, index in limbs.items():
-                if index >= len(points) or points[index] == [0, 0] or (
-                    index < len(scores) and scores[index] is not None and float(scores[index]) < 0.15
-                ):
+                reason = None
+                observed = item.get('observed', (item.get('pose_evidence') or {}).get('observed', True))
+                if item.get('contact_registration_reason'):
+                    reason = item['contact_registration_reason']
+                elif (observed is False or item.get('interpolated') or item.get('render_mode') in {'interpolated','edge_hold'}
+                        or item.get('observation_kind') == 'display_interpolation'
+                        or (item.get('pose_evidence') or {}).get('observation_kind') == 'display_interpolation'):
+                    reason = 'not_model_observation'
+                elif index >= len(points) or len(points[index] or []) != 2:
+                    reason = 'missing_joint'
+                elif index >= len(scores) or scores[index] is None:
+                    reason = 'missing_score'
+                else:
+                    try:
+                        xy = tuple(map(float, points[index]))
+                        score = float(scores[index])
+                        if not all(math.isfinite(v) for v in (*xy, score)):
+                            reason = 'nonfinite_joint_or_score'
+                        elif not all(0 < v < 1 for v in xy):
+                            reason = 'outside_image'
+                        elif score < minimum_score or score > 1:
+                            reason = 'weak_joint'
+                    except (TypeError, ValueError):
+                        reason = 'invalid_joint_or_score'
+                if reason:
+                    if trace is not None:
+                        trace.append({'frame':frame,'source_frame':item.get('source_frame_id'),
+                                      'limb':key,'state':'unknown','reason':reason})
                     close(key, frame); continue
                 x, y = map(float, points[index])
                 if "foot" in key:
-                    y += 0.02
-                choices = [hold for hold in holds if cls._inside((x, y), hold, 0.02)]
+                    y += foot_offset
+                parts = [(x, y)]
+                if policy.get('contact_part') == 'wholebody':
+                    indices = {'left_hand':[95,99,103,107,111], 'right_hand':[116,120,124,128,132],
+                               'left_foot':[17,18], 'right_foot':[20,21]}[key]
+                    whole = item.get('wholebody') or {}
+                    wp, ws = whole.get('kpts_xy') or [], whole.get('kpts_score') or []
+                    parts = [tuple(map(float,wp[j])) for j in indices if j < len(wp) and j < len(ws)
+                             and len(wp[j] or []) == 2 and ws[j] is not None
+                             and all(math.isfinite(float(v)) for v in (*wp[j],ws[j]))
+                             and float(ws[j]) >= minimum_score and all(0 <= float(v) <= 1 for v in wp[j])]
+                choices = [hold for hold in holds if any(cls._inside(part, hold, margin) for part in parts)]
+                if policy.get('reject_ambiguous') and len(choices) > 1:
+                    if trace is not None:
+                        trace.append({'frame':frame,'source_frame':item.get('source_frame_id'),'limb':key,
+                                      'state':'unknown','reason':'competing_holds','candidate_ids':[h['id'] for h in choices]})
+                    close(key,frame); continue
                 chosen = min(choices, key=lambda hold: abs(x - hold["bbox"][0] - hold["bbox"][2] / 2)
                              + abs(y - hold["bbox"][1] - hold["bbox"][3] / 2)) if choices else None
                 hold_id = chosen["id"] if chosen else None
@@ -3846,12 +4030,18 @@ class ReplayAnalyzerBase:
                     current[key], since[key] = hold_id, frame
                 if hold_id is not None:
                     run[key] += 1
-                    enough = times[frame] - times[since[key]] >= .4 - 1e-8 if source_fps else run[key] >= dwell
+                    enough = times[frame] - times[since[key]] >= duration - 1e-8 if source_fps else run[key] >= dwell
                     confirmed[key] = confirmed[key] or enough
                     if confirmed[key] and stable_at[key] is None:
                         stable_at[key] = frame
                     if confirmed[key]:
                         active[key] = hold_id
+                if trace is not None:
+                    trace.append({'frame':frame,'source_frame':item.get('source_frame_id'),'limb':key,
+                                  'state':'contact_candidate_confirmed' if confirmed[key] else 'near' if choices else 'no_support',
+                                  'reason':None if confirmed[key] else 'duration_gate' if choices else 'outside_holds',
+                                  'candidate_ids':[h['id'] for h in choices], 'chosen_id':hold_id,
+                                  'point_xy':[x,y], 'score':scores[index], 'parts_xy':parts})
             holding[frame] = active
         last_frame = int(records[-1].get("frame_id", 0)) + 1 if records else 0
         for key in limbs:
@@ -3916,7 +4106,7 @@ class ReplayAnalyzerBase:
         holds, candidates, evidence, sample, version = self._video_holds(
             frames=frames, route_color=route_color, route_color_sample=prepared_sample,
             saved_route_reference=saved_route_reference, deadline=time.monotonic() + 240,
-            progress=progress, cancelled=cancelled)
+            progress=progress, cancelled=cancelled, source_video=video)
         if cancelled():
             raise ReplayCancelled()
         # Even a zero-hold draft can be repaired manually before global confirmation.
@@ -3994,6 +4184,10 @@ class ReplayAnalyzerBase:
             pose_alignment_failed = 0
             detected_pose_frames = 0
             try:
+                if hasattr(self, '_prepare_clip_observations'):
+                    self._prepare_clip_observations(video, video_info, positions, hold_reference,
+                                                    progress=progress, cancelled=cancelled)
+                    publish()
                 progress("抽帧识别攀爬者姿态", 55)
                 for sample_index, source_index in enumerate(positions):
                     if cancelled():
@@ -4019,7 +4213,10 @@ class ReplayAnalyzerBase:
                     person_alignment = None
                     if hasattr(self, 'set_person_reference_transform'):
                         registration_started = time.perf_counter()
-                        person_alignment = align_to_reference(frame, hold_reference)
+                        person_alignment = (self._person_alignment(int(source_index))
+                                            if hasattr(self, '_person_alignment') else None)
+                        if person_alignment is None:
+                            person_alignment = align_to_reference(frame, hold_reference)
                         timings['registration'] = timings.get('registration', 0) + round(
                             (time.perf_counter()-registration_started)*1000)
                         self.set_person_reference_transform(person_alignment[0],
@@ -4092,7 +4289,10 @@ class ReplayAnalyzerBase:
 
             stage_started = time.perf_counter()
             progress("整理骨架数据" if confirmed_holds.get("skeleton_only") else "计算手脚与岩点接触", 82)
-            attempt = {} if confirmed_holds.get('skeleton_only') else self._contacts(contact_records, holds, sample_fps, source_fps=video_info.fps)
+            contact_trace = []
+            attempt = {} if confirmed_holds.get('skeleton_only') else self._contacts(contact_records, holds, sample_fps, source_fps=video_info.fps, trace=contact_trace)
+            if not confirmed_holds.get('skeleton_only'):
+                attempt['contact_evidence'] = {'version':1,'basis':'projected_joint_and_duration_not_physical_contact_proof','frames':contact_trace}
             pose_samples = build_pose_samples(records, video_info)
             add_attempt_source_times(attempt, pose_samples, video_info)
             attempt["action_steps"] = build_action_steps(attempt.get("contacts") or [])
@@ -4204,7 +4404,7 @@ class AliyunReplayAnalyzer(ReplayAnalyzerBase):
                 "pose": {"name": self.pose_model, "version": REPLAY_POSE_API_VERSION},
             },
             "algorithms": {
-                "hold_color": TWELVE_COLOR_VERSION,
+                "hold_color": REPLAY_COLOUR_VERSION,
                 "contact": "mask-contour-dwell-0.4s-v2",
             },
             "sampling": {
@@ -4456,6 +4656,35 @@ def create_climb_replay_router(
 
     def route_reference(username: str, route_id: str) -> dict | None:
         return route_reference_lookup(route_id, username) if route_id and route_reference_lookup else None
+
+    from core.replay_preview import preview_router
+    router.include_router(preview_router(store, owner, limits))
+
+    @router.post('/prepared-videos/{key}/start', status_code=202)
+    def start_prepared_video(key: str, payload: ReplayUploadCreate, request: Request):
+        username = owner(request)
+        route_id, route_color = (None, '') if payload.skip_holds else resolve_route(username, payload.route_id, payload.route_color)
+        consent = consent_grant(payload.consent_version, payload.consent_granted, attempt=1)
+        consent.update(event='local_processing_granted', skip_holds=payload.skip_holds)
+        color_sample = parse_color_sample(payload.route_color_sample)
+        with store._lock:
+            manager.ensure_capacity()
+            prepared = store.prepared_previews.take(key, username)
+            try:
+                info = prepared['info']
+                if payload.trim_start_seconds != 0 or (payload.trim_end_seconds is not None and abs(payload.trim_end_seconds-info.duration_seconds) > .1):
+                    raise HTTPException(409, '视频范围已变化，请重新导入后取色。')
+                root = Path(prepared['work'].name)
+                job = store.create_pending(owner=username, route_id=route_id, route_color=route_color,
+                    source=root/'source.mp4', original_name=prepared['filename'], content_type=prepared['content_type'],
+                    consent=consent, retention_mode=retention_choice(payload.retention_mode),
+                    trim_start_seconds=0, trim_end_seconds=info.duration_seconds,
+                    route_color_sample=color_sample, saved_route_reference=route_reference(username, route_id))
+                job = store.finish_preparation(job['id'], root/'preview.mp4', info)
+                manager.enqueue(job['id'])
+                return job
+            finally:
+                prepared['work'].cleanup()
 
     @router.get("/consent-policy")
     def get_consent_policy(request: Request):

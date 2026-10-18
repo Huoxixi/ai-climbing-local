@@ -16,6 +16,7 @@ __pycache__/
 !frontend/.env.boulder-local
 backend/data/
 models/*.pth
+models/*.pt
 backend/model_assets/**/*.onnx
 *.sqlite3*
 test-results/

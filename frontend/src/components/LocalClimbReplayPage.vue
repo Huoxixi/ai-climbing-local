@@ -15,7 +15,7 @@
           <button type="button" class="delete-record-button" aria-label="删除整次记录" title="删除整次记录" :disabled="isDeleting || isJobDeleting" @click="deleteEntireReplay"><Delete aria-hidden="true" />{{ isJobDeleting ? '正在删除…' : '删除' }}</button>
         </div>
         <UnifiedReplayPlayer v-if="result && activeJob && !isJobDeleting" v-show="!holdRepairOpen" ref="unifiedPlayer" :key="`${activeJob.id}:${routeMapPlayerVersion}`" :job="activeJob" :legacy-url="replayVideoUrl" :fallback-actions="actionEvents" />
-        <template v-if="!result && !playbackUrl">
+        <template v-if="!result && !selectedFile && !playbackUrl">
         <div
           v-if="!isBusy"
           class="video-drop"
@@ -31,7 +31,7 @@
           @drop.prevent="onDrop"
         >
           <strong>导入视频</strong>
-          <span>MP4 / MOV · 最大 500 MB</span>
+          <span>常见视频格式 · 最大 500 MB</span>
           <span class="upload-action">选择视频</span>
         </div>
 
@@ -83,13 +83,13 @@
             <button type="button" class="review-menu-delete" aria-label="删除整次记录" :disabled="isDeleting || isJobDeleting" @click="reviewAssetAction('delete')"><Delete aria-hidden="true" />删除这条记录</button>
           </div>
         </div>
-        <div v-if="playbackUrl && !result" class="playback-review" :class="{ 'has-action-focus': activeAction }">
+        <div v-if="(playbackUrl || selectedFile) && !result" class="playback-review" :class="{ 'has-action-focus': activeAction }">
           <div ref="videoStage" class="video-stage">
             <div ref="reviewViewport" class="review-media-viewport" :class="{ 'is-zoomed':reviewZoom>1 }" :data-zoom-animating="reviewZoomAnimating" :style="reviewViewportStyle" @wheel="handleReviewWheel" @pointerdown.capture="startReviewTouchPan" @pointermove.capture="moveReviewTouchPan" @pointerup.capture="endReviewTouchPan" @pointercancel.capture="endReviewTouchPan" @keydown.esc="holdPreview=null;selectedHoldId=''">
             <div class="video-canvas" :style="reviewMediaStyle">
               <video
                 ref="videoElement"
-                :src="playbackUrl"
+                :src="playbackUrl || undefined"
                 :controls="reviewZoom === 1"
                 playsinline
                 preload="auto"
@@ -183,8 +183,8 @@
             <div v-if="playbackStatus === 'loading' || playbackStatus === 'unavailable'" class="video-preview-state" :aria-busy="playbackStatus === 'loading'">
               <div v-if="playbackStatus === 'loading'" class="video-preview-message" role="status">
                 <Loading class="video-preview-spinner" aria-hidden="true" />
-                <strong>正在加载视频画面</strong>
-                <p>{{ playbackKind === 'preview' ? '正在读取本地文件，尚未上传。' : '正在缓冲，请稍候。' }}</p>
+                <strong>{{ preparingPreview ? '正在准备视频' : '正在加载视频画面' }}</strong>
+                <p>{{ preparingPreview ? '正在本机转换为统一格式，原文件保留。' : '正在缓冲，请稍候。' }}</p>
               </div>
               <div v-else class="video-preview-message" role="alert">
                 <Warning aria-hidden="true" />
@@ -243,7 +243,7 @@
             </li>
           </ol>
         </nav>
-        <input ref="fileInput" class="visually-hidden" type="file" accept="video/mp4,video/quicktime,video/x-m4v,video/webm,video/3gpp,video/3gpp2,video/x-matroska,.mp4,.mov,.m4v,.webm,.3gp,.3g2,.mkv" @change="onFileChange" />
+        <input ref="fileInput" class="visually-hidden" type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.3gp,.3g2,.mkv,.avi,.mpg,.mpeg,.mpe,.ts,.mts,.m2ts,.m2t,.wmv,.asf,.flv,.f4v,.vob,.ogv,.ogg,.mxf,.divx" @change="onFileChange" />
 
         <div v-if="activeJob && (!result || isBusy) && activeJob.status !== 'awaiting_hold_review'" class="analysis-state" :class="activeJob.status" aria-live="polite">
           <div class="state-copy">
@@ -259,7 +259,7 @@
             <button v-if="sourceAvailable" type="button" class="secondary-button" :disabled="!consentPolicy" @click="retryJob">重试本地准备</button>
             <p v-else>原视频已删除，这次复盘不能重新分析。</p>
           </div>
-          <button type="button" :disabled="!canSubmitSkeleton" @click="submit(true)">跳过岩点，只生成骨架</button>
+          <button type="button" :disabled="!canSubmitSkeleton" @click="submit(true)">跳过岩点识别</button>
           <button v-if="isBusy" type="button" class="cancel-action" @click="cancelJob">取消任务</button>
         </div>
 
@@ -282,11 +282,11 @@
         <p v-if="videoMeta?.duration > MAX_VIDEO_SECONDS" class="setup-note">本次分析前 90 秒。</p>
         <template #footer>
           <p v-if="playbackStatus === 'unavailable'">无法预览，请重新加载或更换视频。</p>
-          <button type="button" class="primary-action" aria-label="上传并本地识别岩点" :disabled="!canSubmit" @click="submit(false)">
+          <button type="button" class="primary-action" aria-label="识别岩点" :disabled="!canSubmit" @click="submit(false)">
             <Loading v-if="isBusy || isSubmitting" class="primary-spinner" />
-            <span>{{ isSubmitting ? (uploadProgress < 100 ? `正在上传 ${uploadProgress}%` : '正在创建后台任务') : (isBusy ? '正在处理' : '上传并识别岩点') }}</span>
+            <span>{{ isSubmitting ? '正在开始识别…' : (isBusy ? '正在处理' : '识别岩点') }}</span>
           </button>
-          <button type="button" :disabled="!canSubmitSkeleton" @click="submit(true)">跳过岩点，只生成骨架</button>
+          <button type="button" :disabled="!canSubmitSkeleton" @click="submit(true)">跳过岩点识别</button>
           <button v-if="isBusy" type="button" class="cancel-action" @click="cancelJob">取消任务</button>
           <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
           <p v-if="formNotice" class="form-notice" role="status">{{ formNotice }}</p>
@@ -294,7 +294,7 @@
       </TaskPanel>
     </div>
 
-      <button v-if="!result && canStartSkeleton && !activeJob?.skeleton_only" type="button" @click="startAnalysis(true)">放弃岩点，只生成骨架</button>
+      <button v-if="!result && canStartSkeleton && !activeJob?.skeleton_only" type="button" @click="startAnalysis(true)">跳过岩点识别</button>
       <footer v-if="!result && reviewResult && !activeJob?.skeleton_only && !isJobDeleting && !isBusy" class="hold-global-actions">
         <div v-if="!repairDetailsOpen" class="hold-inline-feedback" aria-live="polite">
           <span v-if="holdPreviewLoading">正在描出岩点轮廓…</span>
@@ -542,6 +542,9 @@ const reviewSaving = ref(false)
 const reviewError = ref('')
 const selectedFile = ref(null)
 const previewUrl = ref('')
+const preparingPreview = ref(false)
+const preparedPreviewId = ref('')
+let previewController = null
 const videoMeta = ref(null)
 const playbackStatus = ref('idle')
 const playbackFailure = ref('')
@@ -936,8 +939,8 @@ const analysisCost = computed(() => analysisEvidence.value?.cost || {})
 const analysisTimings = computed(() => analysisEvidence.value?.timings_ms || {})
 const trimDuration = computed(() => Math.max(0, Number(trimEndSeconds.value || 0) - Number(trimStartSeconds.value || 0)))
 const trimIsValid = computed(() => !videoMeta.value || (trimStartSeconds.value >= 0 && trimEndSeconds.value > trimStartSeconds.value && trimDuration.value <= MAX_VIDEO_SECONDS + .05 && trimEndSeconds.value <= videoMeta.value.duration + .05))
-const canSubmitSkeleton = computed(() => selectedFile.value && consentPolicy.value && trimIsValid.value && !isBusy.value && !isSubmitting.value && !isDeleting.value)
-const canSubmit = computed(() => selectedFile.value && routeColor.value && colorSample.value?.source === 'video' && consentPolicy.value && trimIsValid.value && !isBusy.value && !isSubmitting.value && !isDeleting.value)
+const canSubmitSkeleton = computed(() => selectedFile.value && videoMeta.value && !preparingPreview.value && consentPolicy.value && trimIsValid.value && !isBusy.value && !isSubmitting.value && !isDeleting.value)
+const canSubmit = computed(() => selectedFile.value && !preparingPreview.value && routeColor.value && colorSample.value?.source === 'video' && consentPolicy.value && trimIsValid.value && !isBusy.value && !isSubmitting.value && !isDeleting.value)
 const statusTitle = computed(() => isJobDeleting.value ? '正在删除整次记录' : ({
   queued: '任务正在排队', running: activeJob.value?.stage || '正在分析视频',
   succeeded: '分析完成', failed: '分析未完成', cancelled: '任务已取消',
@@ -1053,6 +1056,11 @@ function pickColorFromFrame(event) {
 }
 function cancelColorPicking() { colorPicking.value = false; sampledFrameRect = null }
 let selectedFileToken = 0
+function discardPreparedPreview(){
+  const id=preparedPreviewId.value
+  preparedPreviewId.value=''
+  if(id)climbReplayService.discardVideoPreview(id).catch(()=>{})
+}
 async function inspectVideo(file) {
   const url = URL.createObjectURL(file)
   const probe = document.createElement('video')
@@ -1080,20 +1088,26 @@ async function useFile(file) {
   formError.value = ''
   formNotice.value = ''
   if (!file) return
-  const token = ++selectedFileToken
   const supportedTypes = new Set(['video/mp4', 'video/quicktime', 'video/x-m4v', 'video/webm', 'video/3gpp', 'video/3gpp2', 'video/x-matroska'])
-  const supportedExtensions = ['.mp4', '.mov', '.m4v', '.webm', '.3gp', '.3g2', '.mkv']
-  if (!supportedTypes.has(file.type.toLowerCase()) && !supportedExtensions.some((extension) => file.name.toLowerCase().endsWith(extension))) {
-    formError.value = '请选择 MP4、MOV、M4V、WebM、3GP 或 MKV 视频。'
+  const supportedExtensions = ['.mp4','.mov','.m4v','.webm','.3gp','.3g2','.mkv','.avi','.mpg','.mpeg','.mpe','.ts','.mts','.m2ts','.m2t','.wmv','.asf','.flv','.f4v','.vob','.ogv','.ogg','.mxf','.divx']
+  if (!file.type.toLowerCase().startsWith('video/') && !supportedTypes.has(file.type.toLowerCase()) && !supportedExtensions.some((extension) => file.name.toLowerCase().endsWith(extension))) {
+    formError.value = '请选择常见视频文件，如 MP4、MOV、MKV、AVI、WebM、MTS、MPEG 或 WMV。'
     return
   }
   if (file.size > MAX_INPUT_BYTES) {
     formError.value = '视频不能超过 500 MB。'
     return
   }
+  const token = ++selectedFileToken
+  discardPreparedPreview()
+  previewController?.abort()
+  previewController = new AbortController()
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   selectedFile.value = file
-  previewUrl.value = URL.createObjectURL(file)
+  previewUrl.value = ''
+  preparingPreview.value = true
+  playbackStatus.value = 'loading'
+  playbackFailure.value = ''
   videoMeta.value = null
   trimStartSeconds.value = 0
   trimEndSeconds.value = MAX_VIDEO_SECONDS
@@ -1105,15 +1119,19 @@ async function useFile(file) {
   window.clearTimeout(deletionTimer)
   clearColorSample()
   try {
-    const metadata = await inspectVideo(file)
+    const {blob,sourceDuration,preparedId} = await climbReplayService.prepareVideoPreview(file,previewController.signal)
+    if(token!==selectedFileToken){if(preparedId)climbReplayService.discardVideoPreview(preparedId).catch(()=>{});return}
+    preparedPreviewId.value=preparedId
+    const metadata = await inspectVideo(blob)
     if (token !== selectedFileToken) return
-    videoMeta.value = metadata
+    previewUrl.value = URL.createObjectURL(blob)
+    videoMeta.value = {...metadata,duration:Number.isFinite(sourceDuration) && sourceDuration>0 ? sourceDuration : metadata.duration}
     trimEndSeconds.value = Math.min(MAX_VIDEO_SECONDS, videoMeta.value.duration)
     formNotice.value = ''
-  } catch (_) {
+  } catch (error) {
     if (token !== selectedFileToken) return
-    if (playbackStatus.value === 'unavailable') formNotice.value = '本地预览不可用，请重新加载画面或更换视频后取色。'
-  }
+    failPlayback(error?.response?.data?.detail || error?.message || '本机未能准备视频，请重新选择后重试。')
+  } finally { if(token===selectedFileToken)preparingPreview.value=false }
 }
 function onFileChange(event) { void useFile(event.target.files?.[0]); event.target.value = '' }
 function onDrop(event) { isDragging.value = false; void useFile(event.dataTransfer.files?.[0]) }
@@ -1133,7 +1151,7 @@ async function useTestVideo(testCase) {
     await useFile(new File([blob], testCase.filename || `${testCase.id}.mp4`, {
       type: 'video/mp4', lastModified: Date.now(),
     }))
-    formNotice.value = `已载入${testCase.label}。请从画面取色后点击上传并识别岩点。`
+    if(videoMeta.value)formNotice.value = `已载入${testCase.label}。请从画面取色后点击识别岩点。`
   } catch (error) {
     formError.value = error?.response?.status === 404
       ? '本机测试视频不可用，请重新启动本地服务后再试。'
@@ -1158,6 +1176,7 @@ async function submit(skipHolds = false) {
   try {
     activeJob.value = await climbReplayService.create({
       video: selectedFile.value,
+      preparedId: preparedPreviewId.value,
       skipHolds,
       routeColor: routeColor.value,
       routeColorSample: colorSample.value,
@@ -1167,6 +1186,7 @@ async function submit(skipHolds = false) {
       trimStartSeconds: videoMeta.value?.duration > MAX_VIDEO_SECONDS ? Number(trimStartSeconds.value) : 0,
       trimEndSeconds: videoMeta.value?.duration > MAX_VIDEO_SECONDS ? Number(trimEndSeconds.value) : null,
     }, (value) => { uploadProgress.value = value })
+    preparedPreviewId.value=''
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
     previewUrl.value = ''
     selectedFile.value = null
@@ -1225,6 +1245,10 @@ async function cancelVisualReplay() {
   } finally { visualReplaySubmitting.value = false }
 }
 function clearDeletedReplay() {
+  discardPreparedPreview()
+  selectedFileToken += 1
+  previewController?.abort()
+  preparingPreview.value = false
   activeJob.value = null
   selectedFile.value = null
   videoMeta.value = null
@@ -1363,6 +1387,10 @@ async function refreshRouteMap() {
 
 function selectJob(job) {
   if (editorOpen.value && !window.confirm('切换记录会放弃尚未保存的轮廓，是否继续？')) return
+  selectedFileToken += 1
+  discardPreparedPreview()
+  previewController?.abort()
+  preparingPreview.value = false
   editorOpen.value = false
   selectedHoldId.value = ''
   holdRepairOpen.value = false
@@ -1782,6 +1810,7 @@ function failPlayback(message) {
   cancelColorPicking()
 }
 function handlePlaybackLoading(event) {
+  if(preparingPreview.value){window.clearTimeout(playbackLoadTimer);playbackStatus.value='loading';return}
   if (!playbackUrl.value || !isCurrentPlayback(event)) return
   window.clearTimeout(playbackLoadTimer)
   playbackStatus.value = 'loading'
@@ -1807,6 +1836,7 @@ function handlePlaybackStalled(event) {
   if (event.target.readyState < 2) handlePlaybackLoading(event)
 }
 function retryPlayback() {
+  if(selectedFile.value && !previewUrl.value){void useFile(selectedFile.value);return}
   handlePlaybackLoading()
   videoElement.value?.load()
 }
@@ -1946,7 +1976,9 @@ onMounted(async () => {
   }
 })
 onBeforeUnmount(() => {
+  discardPreparedPreview()
   selectedFileToken += 1
+  previewController?.abort()
   window.clearTimeout(playbackLoadTimer)
   window.clearTimeout(pollTimer)
   window.clearTimeout(deletionTimer)

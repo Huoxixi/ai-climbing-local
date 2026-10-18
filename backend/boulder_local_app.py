@@ -87,8 +87,8 @@ if True:
         }
 
     climb_replay_store = ClimbReplayStore(PHOTO_ROUTE_DATA_ROOT / "climb_replay")
-    from core.replay_pose_rtmw import LocalRTMWReplayAnalyzer
-    climb_replay_manager = ClimbReplayManager(climb_replay_store, LocalRTMWReplayAnalyzer())
+    from core.replay_pose_clip import LocalClipReplayAnalyzer
+    climb_replay_manager = ClimbReplayManager(climb_replay_store, LocalClipReplayAnalyzer())
     app.include_router(create_climb_replay_router(
         climb_replay_store,
         climb_replay_manager,

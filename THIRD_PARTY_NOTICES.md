@@ -12,6 +12,17 @@ This release preserves the local boulder application and adds a Windows online i
 
 ## External model assets (not bundled)
 
+The 2026-10-18 installer adds MobileSAM's local TinyViT implementation from
+https://github.com/ChaoningZhang/MobileSAM. The unchanged Python source and its
+Apache-2.0 LICENSE are preserved under vendor/MobileSAM. It downloads the upstream
+mobile_sam.pt checkpoint directly and verifies SHA-256
+6dbb90523a35330fedd7f1d3dfc66f995213d81b29a5ca8108dbcdd4e37d6c2f;
+the checkpoint is not mirrored in Git or bundled in setup. Original model terms
+apply. timm 0.9.16 is installed from PyPI for local PyTorch layer helpers only;
+its original Apache-2.0 license stays in the installed package. The app does not
+use its model-hub or safetensors features, and those optional features are not
+prepared by this installer. The existing tested PyTorch runtime remains pinned.
+
 RTMW-L and YOLOX-S ONNX exports come from official OpenMMLab downloads. The installer fixes archive SHA-256 and the manifest fixes extracted file hashes. MMPose and YOLOX source licenses are Apache-2.0; this is not an assertion that all model or training-data conditions are interchangeable with the source license.
 
 The climbing hold model originates from Tomáš Sláma's project https://github.com/xiaoxiae/Indoor-Climbing-Hold-and-Route-Segmentation and Kaggle release https://www.kaggle.com/datasets/tomasslama/indoor-climbing-gym-hold-segmentation . Public dataset metadata identifies CC BY-SA 4.0; research code is GPL-3.0. Setup obtains v4 model/model_final.pth directly from Kaggle and verifies both archive and extracted SHA-256. We do not mirror the model or redistribute a private checkpoint. Original conditions apply; attribution does not imply endorsement.

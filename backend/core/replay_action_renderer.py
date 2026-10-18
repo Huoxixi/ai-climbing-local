@@ -15,7 +15,7 @@ from .replay_template_renderer import TemplateComposition, _render, _shade, wrap
 from .replay_inplace_renderer import font, ease
 from . import replay_resources
 
-PRESENTATION_VERSION = "original-left-mass-analysis-right-v8"
+PRESENTATION_VERSION = "selectable-scene-and-diagram-round-head-v11"
 SUMMARY_INTRO, SUMMARY_STEP, SUMMARY_HOLD = .6, .8, 3.
 
 
@@ -55,7 +55,8 @@ def active_event(groups, at):
     return None
 
 
-def make_plan(result, *, scope="full", group_id=None, segment_id=None, speed=.75, summary=False, base_video=None, annotations=False, analysis_right=False):
+def make_plan(result, *, scope="full", group_id=None, segment_id=None, speed=.75, summary=False, base_video=None, annotations=False, analysis_right=False,
+              show_skeleton=False, show_human=True, show_diagram=None, background=None):
     result = enrich_names(result)
     if speed not in (.5, .75, 1):
         raise ValueError("Unsupported playback speed")
@@ -81,16 +82,25 @@ def make_plan(result, *, scope="full", group_id=None, segment_id=None, speed=.75
     stop = min(result["video"]["frame_count"], math.ceil(end * fps - 1e-6))
     # Analysis and end statistics are page content, never encoded in new videos.
     rail, annotations, summary = 0, False, False
+    composition = show_diagram is not None or show_skeleton or not show_human
+    diagram = analysis_right if show_diagram is None else show_diagram
+    panes = int(show_human or show_skeleton) + int(diagram)
+    if not panes:
+        raise ValueError('Choose at least one picture')
+    if show_skeleton and not show_human and (not background or background.get('status') != 'ready'):
+        raise ValueError('Empty background is unavailable')
     return {"version": VERSION, "presentation_version": PRESENTATION_VERSION,
-            "width": media["width"] * (2 if analysis_right else 1) + rail, "height": media["height"], "base_width": media["width"] * (2 if analysis_right else 1),
-            "analysis_right":analysis_right, "source_video":result['video'], 'attempt':result.get('attempt') or {}, 'torso_trajectory':result.get('torso_trajectory'), 'center_of_mass_trajectory':result.get('center_of_mass_trajectory'),
+            "width": media["width"] * panes + rail, "height": media["height"], "base_width": media["width"] * panes,
+            "composition":composition, "show_skeleton":show_skeleton, "show_human":show_human, "show_diagram":diagram, "background":background,
+            "analysis_right":diagram, "source_video":result['video'], 'attempt':result.get('attempt') or {}, 'torso_trajectory':result.get('torso_trajectory'), 'center_of_mass_trajectory':result.get('center_of_mass_trajectory'),
+            'skeleton_only': bool(result.get('skeleton_only')), 'trajectory_start_seconds': result.get('trajectory_start_seconds'),
             "preserve_base": base_video is not None, "annotations": annotations, "groups": result["groups"],
             "has_human_revision": any(e.get('event_status') == 'human_confirmed' for g in result['groups'] for e in g.get('events', [])),
             "fps": fps, "source_duration_seconds": duration,
             "source_media_duration_seconds": media["frame_count"] / fps, "source_start_frame": first, "source_stop_frame": stop,
             "speed": speed, "summary_seconds": summary_seconds(result["metrics"], result.get('motion_summary')) if scope == "full" and summary else 0,
             "caption": group["description"] if group and group["evidence_status"] == "locally_verified" else "",
-            "tracking_samples": result["pose_samples"], "holds": result["holds"], "metrics": result["metrics"], "motion_summary": result.get('motion_summary'),
+            "tracking_samples": result["pose_samples"], "holds": result.get("holds", []), "metrics": result["metrics"], "motion_summary": result.get('motion_summary'),
             "scope": scope, "group_id": group_id if group else None, "shots": []}
 
 
@@ -136,15 +146,26 @@ class ActionComposition(TemplateComposition):
         super().__init__(plan, source)
         self.base_size = (round(self.size[0] * plan.get("base_width", plan["width"]) / plan["width"]), self.size[1])
         self.analysis = None
-        if plan.get('analysis_right'):
+        self.background = None
+        if plan.get('show_skeleton') and not plan.get('show_human'):
+            self.background = cv2.imdecode(np.fromfile(plan['background']['path'], dtype=np.uint8), cv2.IMREAD_COLOR)
+            if self.background is None:
+                raise ValueError('Empty background is unavailable')
+        if plan.get('analysis_right') or plan.get('composition'):
             from .replay_analysis_view import AnalysisView
             self.analysis = AnalysisView({'video':plan['source_video'],'pose_samples':self.samples,
+                'skeleton_only': plan.get('skeleton_only'), 'trajectory_start_seconds': plan.get('trajectory_start_seconds'),
                 'holds':plan['holds'],'attempt':plan.get('attempt') or {},'center_of_mass_trajectory':plan.get('center_of_mass_trajectory')})
 
     def raw(self, at):
         frame = self.video.at(at)
         if self.analysis:
-            frame = self.analysis.frame(frame,round(at*self.plan['fps']),self.size)
+            if self.plan.get('composition'):
+                frame = self.analysis.compose(frame,round(at*self.plan['fps']),self.size,
+                    show_skeleton=self.plan['show_skeleton'],show_human=self.plan['show_human'],show_diagram=self.plan['show_diagram'],
+                    background=self.background,reference_to_background=(self.plan.get('background') or {}).get('reference_to_background'))
+            else:
+                frame = self.analysis.frame(frame,round(at*self.plan['fps']),self.size)
             return Image.fromarray(cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)).convert('RGBA')
         frame = cv2.resize(frame, self.base_size, interpolation=cv2.INTER_AREA)
         image = Image.new("RGBA", self.size, (13, 20, 24, 255))

@@ -18,12 +18,17 @@ def estimate_center_of_mass(sample):
     if not sample or sample.get('observed') is False:
         return None
     points, scores = sample.get('kpts_xy') or [], sample.get('kpts_score') or []
+    flags=sample.get('joint_eligibility')
+    if flags is not None and (not isinstance(flags,list) or len(flags)!=17 or not all(isinstance(v,bool) for v in flags)):
+        return None
     def valid(i):
         try:
             x, y = points[i]
             score = scores[i]
             return (all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
-                        for v in (x, y, score)) and .5 <= score <= 1 and 0 < x < 1 and 0 < y < 1)
+                        for v in (x, y, score))
+                    and (flags[i] and score>0 if flags is not None else .5 <= score <= 1)
+                    and 0 < x < 1 and 0 < y < 1)
         except (IndexError, TypeError, ValueError):
             return False
     if not all(valid(i) for i in range(5, 17)):

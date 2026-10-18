@@ -252,7 +252,7 @@ def editor_frame(store, job_id, owner, request):
                 pixels = [[x * reference.shape[1], y * reference.shape[0]] for x, y in hold["polygon"]]
                 contours.append({"id": hold["id"], "polygon": transform_polygon(pixels, inverse, frame.shape[1], frame.shape[0])})
         for candidate_index, hold in enumerate(result.get("hold_candidates") or []):
-            if hold.get("polygon") and hold.get("contour_source") == "climbing_model_native_mask":
+            if hold.get("polygon") and hold.get("contour_source") in {'climbing_model_native_mask','model_guided_mobilesam_mask'}:
                 pixels = [[x * reference.shape[1], y * reference.shape[0]] for x, y in hold["polygon"]]
                 mapped = transform_polygon(pixels, inverse, frame.shape[1], frame.shape[0])
                 if all(0 <= x <= 1 and 0 <= y <= 1 for x, y in mapped):
@@ -332,13 +332,13 @@ def editor_preview(store, job_id, owner, request):
         if request.candidate_index is None or request.candidate_index >= len(candidates):
             raise HTTPException(409, "候选已变化，请重新读取画面。")
         candidate = candidates[request.candidate_index]
-        if candidate.get("contour_source") != "climbing_model_native_mask" or not candidate.get("polygon") or frame["matrix"] is None:
+        if candidate.get("contour_source") not in {'climbing_model_native_mask','model_guided_mobilesam_mask'} or not candidate.get("polygon") or frame["matrix"] is None:
             raise HTTPException(422, "这个候选不能直接补入，请选择清晰帧手绘。")
         inverse = np.linalg.inv(frame["matrix"])
         pixels = [[x * frame["reference_width"], y * frame["reference_height"]] for x, y in candidate["polygon"]]
         points = transform_polygon(pixels, inverse, frame["width"], frame["height"])
         return {"candidates":[_make_proposal(store, job, owner, revision, frame, points,
-            "climbing_model_native_mask", candidate.get("score"), request.hold_id)]}
+            candidate['contour_source'], candidate.get("score"), request.hold_id)]}
     values = request.region_xyxy
     if not values or not all(math.isfinite(v) and 0 <= v <= 1 for v in values) or values[2] <= values[0] or values[3] <= values[1]:
         raise HTTPException(422, "请框出局部识别范围。")

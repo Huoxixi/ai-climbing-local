@@ -5,7 +5,7 @@
       <video ref="video" :src="src" :controls="!frame" :class="{ 'composite-source': frame }" playsinline preload="metadata" aria-label="攀爬复盘视频"
         @timeupdate="updateTime" @seeking="$emit('seeking')" @seeked="drawAndSeek" @ended="ended"
         @loadedmetadata="loaded" @loadeddata="draw" @play="playing" @pause="paused" @error="$emit('error')" />
-      <canvas v-if="frame" ref="canvas" :width="frame.width" :height="frame.height" :aria-label="originalSource ? '左侧原视频，右侧岩点、骨架与中心移动路线' : '保留的历史复盘画面'" />
+      <canvas v-if="frame" ref="canvas" :width="frame.width" :height="frame.height" :aria-label="selection ? '所选复盘画面' : originalSource ? '左侧原视频，右侧岩点、骨架与中心移动路线' : '保留的历史复盘画面'" />
       <slot />
     </div>
     <aside v-if="$slots.tools" class="picture-tools"><slot name="tools" /></aside>
@@ -22,11 +22,21 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { VideoPlay, VideoPause, FullScreen } from '@element-plus/icons-vue'
 import { drawAnalysisView } from '../services/replayAnalysisView.js'
-const props = defineProps({ src: String, summary: Boolean, expandedSummary: Boolean, frame: Object, originalSource:Boolean, visualization:Object, holds: { type: Array, default: () => [] }, contacts: { type: Array, default: () => [] } })
-const emit = defineEmits(['timeupdate','seeking','seeked','ended','loadedmetadata','play','pause','error','fullscreen'])
+const props = defineProps({ src: String, summary: Boolean, expandedSummary: Boolean, frame: Object, originalSource:Boolean, visualization:Object, selection:Object, backgroundUrl:String, backgroundInfo:Object, holds: { type: Array, default: () => [] }, contacts: { type: Array, default: () => [] } })
+const emit = defineEmits(['timeupdate','seeking','seeked','ended','loadedmetadata','play','pause','error','fullscreen','background-error','background-ready'])
 const video = ref(null), canvas = ref(null), stage = ref(null), isPlaying = ref(false), time = ref(0), mediaDuration = ref(0)
 let animation
 let resizeObserver
+let background = null, backgroundGeneration = 0
+watch(()=>props.backgroundUrl, url=>{
+  const token=++backgroundGeneration
+  background=null
+  if(!url){draw();return}
+  const image=new Image()
+  image.onload=()=>{if(token===backgroundGeneration){background=image;draw();emit('background-ready')}}
+  image.onerror=()=>{if(token===backgroundGeneration){background=null;draw();emit('background-error')}}
+  image.src=url
+},{immediate:true})
 const availableHeight = ref(null)
 const stageStyle = computed(() => ({ '--frame-limit': availableHeight.value ? `${availableHeight.value}px` : 'calc(100dvh - 200px)', '--frame-ratio': props.frame ? props.frame.width / props.frame.height : 2 }))
 function fitViewport() {
@@ -34,7 +44,7 @@ function fitViewport() {
   const viewport = window.visualViewport?.height || window.innerHeight
   const top = Math.max(0, stage.value.getBoundingClientRect().top - (window.visualViewport?.offsetTop || 0))
   const view = stage.value.closest('.replay-view')
-  const reserved = ['.action-strip','.replay-controls'].reduce((total,selector)=>total+(view?.querySelector(selector)?.getBoundingClientRect().height || 0),0)
+  const reserved = ['.action-strip','.replay-controls','.picture-choices'].reduce((total,selector)=>total+(view?.querySelector(selector)?.getBoundingClientRect().height || 0),0)
   availableHeight.value = Math.floor(Math.max(80, viewport - top - reserved - 60))
 }
 const frameStyle = computed(() => props.frame ? { aspectRatio: `${props.frame.width} / ${props.frame.height}`, '--frame-ratio': props.frame.width / props.frame.height } : {})
@@ -42,7 +52,7 @@ const clock = value => `${Math.floor(value / 60)}:${Math.floor(value % 60).toStr
 function draw() {
   if (!canvas.value || !props.frame || !video.value || video.value.readyState < 2) return
   const ctx = canvas.value.getContext('2d'), f = props.frame
-  if(props.originalSource){drawAnalysisView(ctx,video.value,f,props.holds,props.contacts,props.visualization,video.value.currentTime);return}
+  if(props.originalSource){drawAnalysisView(ctx,video.value,f,props.holds,props.contacts,props.visualization,video.value.currentTime,props.selection,background,props.backgroundInfo);return}
   ctx.fillStyle = '#0e100f'; ctx.fillRect(0,0,f.width,f.height)
   ctx.drawImage(video.value, ...f.oldVideo, ...f.video)
   // Rebuild the fixed map from saved real contours. Old baked narrow maps
@@ -76,7 +86,7 @@ function togglePlay() { if (video.value.paused) video.value.play().catch(() => {
 function scrub(event) { video.value.currentTime = Number(event.target.value) }
 function fullscreen() { emit('fullscreen') }
 watch(() => [props.frame, props.src], async () => { await nextTick(); fitViewport(); draw() })
-watch(() => [props.visualization,props.contacts,props.holds], draw)
+watch(() => [props.visualization,props.contacts,props.holds,props.selection], draw, {deep:true})
 onMounted(() => {
   fitViewport()
   resizeObserver = new ResizeObserver(fitViewport)

@@ -79,7 +79,7 @@ class TransportTests(unittest.TestCase):
 
 
 class ExportTests(unittest.TestCase):
-    def test_cited_frames_are_exported_even_without_pose_at_that_frame(self):
+    def test_cited_original_frames_are_excluded_from_materials(self):
         result=scene()
         result['ai_analysis']={'actions':[{'evidence':[{'frame_id':'frame-3','time_seconds':.75}]}]}
         with tempfile.TemporaryDirectory() as folder:
@@ -90,7 +90,8 @@ class ExportTests(unittest.TestCase):
             stream=build_bundle(result,mapping=None,source_path=video)
             try:
                 with zipfile.ZipFile(stream) as bundle:
-                    self.assertIn('evidence_frames/frame-3.jpg',bundle.namelist())
+                    self.assertFalse(any(name.startswith('evidence_frames/') for name in bundle.namelist()))
+                    self.assertNotIn('source.mp4',bundle.namelist())
             finally:stream.close()
 
     def test_data_only_contains_full_pose_angles_missingness_and_prompt(self):
@@ -103,7 +104,8 @@ class ExportTests(unittest.TestCase):
             self.assertNotIn('replay.mp4', bundle.namelist())
             data = json.loads(bundle.read('analysis.json'))
             self.assertEqual(data['pose_samples'], result['pose_samples'])
-            self.assertEqual(data['center_of_mass_trajectory'], result['center_of_mass_trajectory'])
+            self.assertEqual(data['center_of_mass_trajectory']['segments'], result['center_of_mass_trajectory']['segments'])
+            self.assertNotIn('version',data['center_of_mass_trajectory'])
             poses = bundle.read('pose_samples.csv').decode('utf-8-sig')
             self.assertIn('0,0,left_elbow,,,0.1,False,reference', poses)
             angles = bundle.read('joint_angles.csv').decode('utf-8-sig')
@@ -114,7 +116,7 @@ class ExportTests(unittest.TestCase):
             manifest = json.loads(bundle.read('manifest.json'))
             self.assertEqual(set(manifest['files']), set(bundle.namelist()))
 
-    def test_full_video_and_frames_have_explicit_source_time_mapping(self):
+    def test_selected_video_has_time_mapping_without_original_or_frames(self):
         result = scene()
         with tempfile.TemporaryDirectory() as folder:
             video = Path(folder) / 'source.mp4'
@@ -127,10 +129,9 @@ class ExportTests(unittest.TestCase):
             stream = build_bundle(result, mapping=mapping, source_path=video, video_path=video)
             try:
                 with zipfile.ZipFile(stream) as bundle:
-                    self.assertEqual(bundle.read('source.mp4'), video.read_bytes())
+                    self.assertNotIn('source.mp4',bundle.namelist())
                     self.assertEqual(bundle.read('replay.mp4'), video.read_bytes())
-                    frames = json.loads(bundle.read('evidence_frames/index.json'))
-                    self.assertEqual([r['time_seconds'] for r in frames], [0, .5, 1, 1.5])
+                    self.assertFalse(any(name.startswith('evidence_frames/') for name in bundle.namelist()))
                     manifest = json.loads(bundle.read('manifest.json'))
                     self.assertEqual(manifest['video_time_mapping'], mapping)
             finally:

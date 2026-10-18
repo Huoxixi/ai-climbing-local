@@ -285,7 +285,8 @@ def _climbing_model_masks(image: np.ndarray, deadline: float,
 
 def _climbing_model_masks_batch(images: list[np.ndarray], deadline: float,
                                 cancelled: Callable[[], bool], progress=lambda stage, value: None,
-                                pack_masks: bool = False, reuse_model: bool = False):
+                                pack_masks: bool = False, reuse_model: bool = False,
+                                include_volumes: bool = False, native_metadata: list | None = None):
     """Run multiple video frames with one model load and the same production profile."""
     if not images:
         raise ValueError("没有可识别的画面")
@@ -354,7 +355,9 @@ def _climbing_model_masks_batch(images: list[np.ndarray], deadline: float,
         with torch.inference_mode():
             instances = model([{"image": tensor, "height": image.shape[0], "width": image.shape[1]}])[0]["instances"].to("cpu")
         classes = instances.pred_classes.numpy()
-        keep = classes == 0
+        keep = np.isin(classes, [0,1]) if include_volumes else classes == 0
+        if native_metadata is not None:
+            native_metadata.append({'classes':classes[keep].tolist()})
         if pack_masks:
             masks = [np.packbits(mask.astype(np.uint8), axis=1)
                      for mask in instances.pred_masks.numpy()[keep]]

@@ -13,6 +13,9 @@ WINDOW_BASIS = "two_distinct_lit_holds_to_two_hand_finish_overlap"
 
 def climbing_window(result):
     """Use overlapping saved contact intervals, never pose proximity or video edges."""
+    if result.get('skeleton_only'):
+        from .replay_pose_start import pose_climbing_window
+        return pose_climbing_window(result)
     video = result.get("video") or {}
     fps = video.get("fps") or 0
     duration = result.get("source_duration_seconds", video.get("duration_seconds", 0))
