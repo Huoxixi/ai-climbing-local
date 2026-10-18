@@ -26,6 +26,9 @@ HOLD_SHA = '995960a74819e21bd66d7be56ae6e1c8124ec0a06fece4fae13812887d86ebea'
 HOLD_ARCHIVE_SHA = '85a80cd02119d154b1e27f047d327beebfaffe7f99e4d24a117f11040d79aedf'
 MOBILESAM_URL = 'https://raw.githubusercontent.com/ChaoningZhang/MobileSAM/master/weights/mobile_sam.pt'
 MOBILESAM_SHA = '6dbb90523a35330fedd7f1d3dfc66f995213d81b29a5ca8108dbcdd4e37d6c2f'
+TIMM_FILE = 'timm-0.9.16-py3-none-any.whl'
+TIMM_URL = 'https://files.pythonhosted.org/packages/68/99/2018622d268f6017ddfa5ee71f070bad5d07590374793166baa102849d17/' + TIMM_FILE
+TIMM_SHA = 'bf5704014476ab011589d3c14172ee4c901fd18f9110a928019cac5be2945914'
 WEBVIEW_URL = 'https://go.microsoft.com/fwlink/p/?LinkId=2124703'
 
 
@@ -194,7 +197,7 @@ def clean_download_cache(cache):
         directory = cache / name
         if directory.exists() and directory.resolve().is_relative_to(cache) and not directory.is_symlink():
             shutil.rmtree(directory,ignore_errors=True)
-    for name in ('holds-v4.zip','mobile_sam.pt','rtmw-l-384x288.zip','yolox-s.zip','MicrosoftEdgeWebview2Setup.exe'):
+    for name in ('holds-v4.zip','mobile_sam.pt',TIMM_FILE,'rtmw-l-384x288.zip','yolox-s.zip','MicrosoftEdgeWebview2Setup.exe'):
         path = cache / name
         if path.is_file() and path.resolve().is_relative_to(cache):
             path.unlink(missing_ok=True)
@@ -278,7 +281,7 @@ def remaining_space(payload, staging, cache):
     prepared = size(payload) + min(size(staging), int(1.6 * 1024**3))
     # Only named reusable downloads, never corrupt/unknown files or user data.
     reusable = size(cache / 'packages') + size(cache / 'torch-runtime')
-    digests = {'holds-v4.zip':HOLD_ARCHIVE_SHA,'mobile_sam.pt':MOBILESAM_SHA}
+    digests = {'holds-v4.zip':HOLD_ARCHIVE_SHA,'mobile_sam.pt':MOBILESAM_SHA,TIMM_FILE:TIMM_SHA}
     from backend.scripts.install_replay_rtmw import ASSETS
     digests.update({archive:digest for _,archive,_,digest in ASSETS})
     for name,digest in digests.items():
@@ -375,9 +378,10 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
         # MobileSAM uses only timm's local PyTorch layers, matching the verified
         # 2026-10-17 app. Hub/download features are disabled, so do not install
         # unrelated model-hub dependencies or let them replace the tested Torch.
-        command([str(python), '-m', 'pip', '--isolated', 'install', '--no-deps', '--only-binary=:all:',
-                 '--disable-pip-version-check', '--cache-dir', str(env_cache),
-                 '--retries', '3', '--timeout', '60', 'timm==0.9.16'], staging, log,
+        event(35, '准备运行环境（2/5）', '正在准备本机分割组件。')
+        timm_wheel=download(TIMM_URL,cache/TIMM_FILE,TIMM_SHA)
+        command([str(python), '-m', 'pip', '--isolated', 'install', '--no-deps', '--no-index',
+                 '--disable-pip-version-check', '--no-cache-dir', str(timm_wheel)], staging, log,
                 '岩点补充分割组件安装失败。请检查网络后重试。')
         event(50, '准备岩点识别模型（3/5）', '正在下载岩点识别模型。')
         def hold_progress(received, total):
