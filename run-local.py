@@ -37,7 +37,9 @@ def main():
         'CLIMB_REPLAY_KEEP_HIGH_RESOLUTION':'1','CLIMB_REPLAY_RTMW_DEVICE':'auto',
         'CLIMB_REPLAY_RTMW_MODEL_DIR':str(ROOT / 'backend/model_assets/rtmw-l-384x288'),
         'PHOTO_ROUTE_CLIMBING_MODEL_CONFIG':str(ROOT / 'backend/model_assets/climbing-mask-rcnn-r50-fpn-1200.yaml'),
-        'PHOTO_ROUTE_CLIMBING_MODEL_CHECKPOINT':str(ROOT / 'models/verified-model_final.pth')})
+        'PHOTO_ROUTE_CLIMBING_MODEL_CHECKPOINT':str(ROOT / 'models/verified-model_final.pth'),
+        'PHOTO_ROUTE_MOBILESAM_REPO':str(ROOT / 'vendor/MobileSAM'),
+        'PHOTO_ROUTE_MOBILESAM_CHECKPOINT':str(ROOT / 'models/mobile_sam.pt')})
     sys.path[:0] = [str(ROOT),str(ROOT / 'backend')]
     from desktop.paths import resolve_paths
     from desktop.storage import apply_pending_change

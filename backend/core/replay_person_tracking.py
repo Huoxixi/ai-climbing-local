@@ -2,7 +2,7 @@
 import cv2
 import numpy as np
 
-VERSION = 'route-gated-appearance-recovery-v4'
+VERSION = 'multi-observation-route-recheck-v5'
 MAX_RECOVERY_SECONDS = 1.5
 
 

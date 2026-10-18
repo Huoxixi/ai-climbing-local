@@ -3,6 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 import queue
 import threading
+import time
 import uuid
 import io
 import zipfile
@@ -58,6 +59,10 @@ class ActionExport(BaseModel):
     group_id: str | None = None
     segment_id: str | None = None
     speed: Literal[0.5, 0.75, 1] = 0.75
+    show_skeleton: bool = False
+    show_human: bool = True
+    show_diagram: bool = True
+    include_data: bool = False
 
 
 class ActionRevision(BaseModel):
@@ -81,6 +86,11 @@ class ActionUndo(BaseModel):
     result_version: str
 
 
+class TrajectoryStart(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    start_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+
+
 class ActionManager:
     def __init__(self, store, engine=None, renderer=None):
         self.store, self.engine, self.renderer = store, engine or ActionEngine(), renderer or render_actions
@@ -91,8 +101,116 @@ class ActionManager:
         self.running = set()
         self.presentation_cache = {}
         self.legacy_vision_returns = {}
+        self._background_runs = set()
         self.thread = None
         store.action_manager = self
+
+    def background_binding(self, job):
+        from .replay_background import VERSION
+        path = self.source(job)
+        stat = path.stat()
+        return digest({'version': VERSION, 'source': [stat.st_size, stat.st_mtime_ns],
+                       'video': job['result'].get('video'),
+                       'reference': (job['result'].get('hold_evidence') or {}).get('reference_frame')})
+
+    def background_status(self, job):
+        from .replay_background import REASONS
+        try:
+            binding = self.background_binding(job)
+        except (HTTPException, OSError, ValueError):
+            return {'status': 'unavailable', 'reason': 'source_missing', 'message': REASONS['source_missing']}
+        saved = job.get('replay_background') or {}
+        if saved.get('binding') != binding:
+            return {'status': 'not_started', 'message': REASONS['not_started']}
+        if saved.get('status') == 'running' and (job['id'], binding) not in self._background_runs:
+            return {'status': 'not_started', 'message': REASONS['not_started']}
+        if saved.get('status') == 'ready' and not (self.store._path(job['id']).parent / saved['storage_name']).is_file():
+            return {'status': 'not_started', 'message': REASONS['not_started']}
+        return {k: deepcopy(saved[k]) for k in ('status', 'reason', 'message', 'version', 'binding',
+            'reference_to_background', 'source_frame_id', 'width', 'height') if k in saved}
+
+    def prepare_background(self, job_id, owner):
+        from .replay_background import REASONS
+        with self.store._lock:
+            job = self.store.get(job_id, owner, private=True)
+            source = self.source(job)
+            binding = self.background_binding(job)
+            if self.background_status(job)['status'] != 'not_started':
+                return self.background_status(job)
+            self._background_runs.add((job_id, binding))
+            self.store.update(job_id, replay_background={'binding': binding, 'status': 'running', 'message': REASONS['running']})
+            threading.Thread(target=self._prepare_background, args=(job_id, owner, binding, source, deepcopy(job['result'])),
+                             daemon=True, name='replay-background').start()
+            return self.background_status(self.store.get(job_id, owner, private=True))
+
+    def _prepare_background(self, job_id, owner, binding, source, result):
+        from .replay_background import prepare_background, unavailable
+        from .replay_resources import high_resource_slot
+        target = self.store._path(job_id).parent / ('empty-scene-' + uuid.uuid4().hex + '.png')
+        last_check = 0.
+        source_stat = None
+        def cancelled(force=False):
+            nonlocal last_check
+            try:
+                if self.stop.is_set() or self.store._deletion_path(job_id).exists():
+                    return True
+                stat = source.stat()
+                if (stat.st_size, stat.st_mtime_ns) != source_stat:
+                    return True
+                now = time.monotonic()
+                if not force and now - last_check < .5:
+                    return False
+                with self.store._lock:
+                    job = self.store.get(job_id, owner, private=True)
+                    invalid = self.background_binding(job) != binding or (job.get('replay_background') or {}).get('binding') != binding
+                    last_check = now
+                    return invalid
+            except (HTTPException, OSError, ValueError):
+                return True
+        try:
+            stat = source.stat()
+            source_stat = (stat.st_size, stat.st_mtime_ns)
+            with high_resource_slot(cancelled=cancelled):
+                checksum = self.store._sha256(source)
+                status = prepare_background(source, target, result, cancelled=cancelled)
+                if cancelled(force=True) or checksum != self.store._sha256(source):
+                    raise InterruptedError()
+            with self.store._lock:
+                if cancelled(force=True):
+                    raise InterruptedError()
+                self.store.update(job_id, replay_background={**status, 'binding': binding,
+                    **({'storage_name': target.name} if status['status'] == 'ready' else {})})
+                if status['status'] == 'ready':
+                    target = None
+        except Exception:
+            with self.store._lock:
+                if not cancelled(force=True):
+                    self.store.update(job_id, replay_background={**unavailable('unverified'), 'binding': binding})
+        finally:
+            if target is not None:
+                target.unlink(missing_ok=True)
+            self._background_runs.discard((job_id, binding))
+
+    def background_file(self, job_id, owner, version):
+        with self.store._lock:
+            job = self.store.get(job_id, owner, private=True)
+            status = self.background_status(job)
+            if status.get('status') != 'ready' or status.get('binding') != version:
+                raise HTTPException(409, '无人背景不可用，请刷新记录。')
+            return self.store._path(job_id).parent / job['replay_background']['storage_name']
+
+    def export_plan(self, job, result, payload):
+        options = {k: payload.get(k, default) for k, default in
+                   (('show_skeleton', False), ('show_human', True), ('show_diagram', True))}
+        background = None
+        if options['show_skeleton'] and not options['show_human']:
+            background = self.background_status(job)
+            if background.get('status') != 'ready' or background.get('binding') != payload.get('background_version'):
+                raise ValueError(background.get('message') or '无人背景已变化，请刷新后导出。')
+            background['path'] = str(self.background_file(job['id'], job['owner'], background['binding']))
+        return make_plan(result, scope=payload['scope'], group_id=payload.get('group_id'),
+            segment_id=payload.get('segment_id'), speed=payload['speed'], summary=False, annotations=False,
+            **options, background=background)
         for path in store.jobs.glob("*/job.json"):
             with store._lock:
                 try:
@@ -276,6 +394,10 @@ class ActionManager:
                 # Reuse the saved evidence and current contact corrections even
                 # for historical results; do not rewrite the stored record.
                 evidence = deepcopy(presentation)
+                evidence['skeleton_only'] = bool(job.get('skeleton_only') or job['result'].get('skeleton_only'))
+                evidence['trajectory_start_seconds'] = job.get('trajectory_start_seconds')
+                presentation['skeleton_only'] = evidence['skeleton_only']
+                presentation['trajectory_start_seconds'] = evidence['trajectory_start_seconds']
                 evidence['attempt'] = corrected_contact_evidence(presentation, job['result']).get('attempt') or {}
                 presentation['torso_trajectory'] = enrich_torso_trajectory(evidence)['torso_trajectory']
             if presentation and not presentation.get('route_usage'):
@@ -311,7 +433,7 @@ class ActionManager:
             checkpoint = self.vision_checkpoint(job)
             if checkpoint.get('legacy_saved_return') and task.get('status') == 'failed':
                 task['error'] = '旧视觉返回已保留，原评语的时间结构未通过校验。已禁止再次发送视觉请求；可免费重新整理本地动作。'
-            return {"task": task, "cost": cost(task.get("usage", [])),
+            return {"task": task, "background": self.background_status(job), "cost": cost(task.get("usage", [])),
                     "saved_commentary_available": bool(self.commentary_checkpoint(job).get('result')),
                     "saved_response_count": len(checkpoint.get('responses', {})),
                     "vision_status": checkpoint.get('vision_status', 'partial' if checkpoint.get('responses') else 'not_started'),
@@ -325,7 +447,7 @@ class ActionManager:
                     "presentation_version": record.get('presentation_version') if valid else None,
                     "stale": bool(record) and not valid, "media_ready": valid and bool(record.get("storage_name")) and record.get('presentation_version') == PRESENTATION_VERSION,
                     "export": deepcopy(export), "export_media": {k: media[k] for k in
-                        ("id", "scope", "group_id", "segment_id", "speed", "result_version") if k in media} if self.valid(job, media) and media.get("result_version") == record.get("id") else None,
+                        ("id", "scope", "group_id", "segment_id", "speed", "result_version", "show_skeleton", "show_human", "show_diagram", "include_data") if k in media} if self.valid(job, media) and media.get("result_version") == record.get("id") else None,
                     "revision_count": len(job.get("action_revisions", [])), "vocabulary": catalogue(),
                     "cloud_configured": self.engine.configured if self.injected_engine else config['ready'],
                     "analysis_input_mode": mode,
@@ -392,6 +514,13 @@ class ActionManager:
             fingerprint = self.fingerprint(job)
             current = job.get(key) or {}
             payload = payload.model_dump()
+            if key == 'action_export':
+                from .replay_export import PACKAGE_VERSION
+                pictures = any(payload[k] for k in ('show_skeleton', 'show_human', 'show_diagram'))
+                if not pictures and not payload['include_data']:
+                    raise HTTPException(400, '请至少选择一项导出内容。')
+                payload['background_version'] = self.background_status(job).get('binding') if payload['show_skeleton'] and not payload['show_human'] else None
+                payload['package_version'] = PACKAGE_VERSION
             if key == 'action_task' and payload['retry_saved_response']:
                 checkpoint = self.vision_checkpoint(job)
                 if payload['cloud_consent'] or checkpoint.get('vision_status') != 'succeeded' or not checkpoint.get('input'):
@@ -443,11 +572,18 @@ class ActionManager:
                 if not self.valid(job, record) or record.get("id") != payload["result_version"]:
                     raise HTTPException(409, "动作结果已更新，请刷新后导出")
                 try:
-                    make_plan(record["result"], scope=payload["scope"], group_id=payload["group_id"], segment_id=payload.get('segment_id'), speed=payload["speed"], analysis_right=True)
-                except ValueError:
-                    raise HTTPException(400, "导出动作范围无效") from None
+                    # Data-only requests validate the interval without rendering it.
+                    self.export_plan(job, record['result'], payload if pictures else {**payload, 'show_human': True})
+                except ValueError as exc:
+                    raise HTTPException(400, str(exc)) from None
                 cached = job.get("action_export_media") or {}
                 if self.valid(job, cached) and cached.get("request_key") == request_key:
+                    return self.get(job_id, owner)
+                if not pictures:
+                    run_id = uuid.uuid4().hex
+                    self.store.update(job_id, action_export={'id': run_id, 'status': 'succeeded', 'progress': 100,
+                        'request_key': request_key, 'fingerprint': fingerprint, 'payload': payload},
+                        action_export_media={'id': run_id, 'fingerprint': fingerprint, 'request_key': request_key, **payload})
                     return self.get(job_id, owner)
             if self.queue.full():
                 raise HTTPException(429, "正在处理其他视频，请稍后重试")
@@ -542,6 +678,7 @@ class ActionManager:
                 previous_result = snapshot.get('action_result') or {}
                 result = (deepcopy(previous_result['result']) if snapshot.get('action_revisions') and self.valid(snapshot, previous_result)
                           else organize(snapshot))
+                result['trajectory_start_seconds'] = snapshot.get('trajectory_start_seconds')
                 if local_retry:
                     stage = 'commentary'
                     config = {'model':checkpoint.get('model')}
@@ -627,6 +764,7 @@ class ActionManager:
                             saved.update(fingerprint=record['fingerprint'],
                                 review_digest=digest(snapshot.get('action_revisions') or []), result=deepcopy(result))
                             self.store.update(job_id, action_commentary_checkpoint=saved)
+                result['trajectory_start_seconds'] = snapshot.get('trajectory_start_seconds')
                 result = enrich_motion_summary(result)
                 result = enrich_route_usage(result, snapshot['result'])
                 if local_retry:
@@ -651,6 +789,7 @@ class ActionManager:
                 plan = make_plan(result, speed=1, summary=False, annotations=False, analysis_right=True)
             else:
                 result = enrich_names(snapshot["action_result"]["result"])
+                result['trajectory_start_seconds'] = snapshot.get('trajectory_start_seconds')
                 result['attempt'] = corrected_contact_evidence(result,snapshot['result']).get('attempt') or {}
                 result = enrich_torso_trajectory(result)
                 if not result.get('motion_summary'):
@@ -659,7 +798,7 @@ class ActionManager:
                     result = enrich_route_usage(result, snapshot['result'])
                 p = record["payload"]
                 render_source, base_video = source, None
-                plan = make_plan(result, scope=p["scope"], group_id=p["group_id"], segment_id=p.get('segment_id'), speed=p["speed"], summary=False, annotations=False, analysis_right=True)
+                plan = self.export_plan(snapshot, result, p)
             target = self.store._path(job_id).parent / f"actions-{run_id}.mp4"
             base_hash = self.store._sha256(render_source)
             stage = "rendering"
@@ -732,7 +871,7 @@ class ActionManager:
                 raise HTTPException(404, "视频不可用")
             return path
 
-    def export_package(self, job_id, owner, version, exported=False, data_only=False):
+    def export_package(self, job_id, owner, version, exported=False, data_only=False, export_id=None):
         """Build an offline bundle containing the replay and its evidence contract."""
         with self.store._lock:
             job = self.store.get(job_id, owner, private=True)
@@ -740,43 +879,55 @@ class ActionManager:
             if not self.valid(job, record) or record.get("id") != version:
                 raise HTTPException(409, "动作结果已更新，请刷新后导出")
             media = job.get("action_export_media") or {}
-            if exported and not data_only and (not self.valid(job, media) or media.get("result_version") != version):
+            if exported and export_id is not None and media.get('id') != export_id:
+                raise HTTPException(409, '导出组合已变化，请重新导出。')
+            if exported and (not self.valid(job, media) or media.get("result_version") != version):
                 raise HTTPException(409, "导出视频版本已变化，请重新生成")
             video_name = media.get("storage_name") if exported else record.get("storage_name")
             video_path = self.store._path(job_id).parent / (video_name or "")
             if not data_only and (not isinstance(video_name, str) or Path(video_name).name != video_name or not video_path.is_file()):
                 raise HTTPException(404, "复盘视频不可用")
             result = record.get("result") or {}
-            checkpoint = self.vision_checkpoint(job)
-            model = checkpoint.get("model") or result.get("commentary_model") or ""
-            vision = {"model":model, "commentary_version":result.get("commentary_version"),
-                "vision_status":checkpoint.get("vision_status", "not_started"),
-                "usage":checkpoint.get("usage", []), "response_count":len(checkpoint.get("responses", {})),
-                "prompt_mode":"evidence_frames_and_computed_data"}
-            # Private configuration, request fingerprints and local paths do not
-            # belong in a user-shareable package.
-            vision['usage'] = [{k:r.get(k) for k in ('model','status','usage','amount_cny','usage_complete')}
-                               for r in checkpoint.get('usage', [])]
             from .replay_action_renderer import make_plan
-            plan = make_plan(result, scope=media.get('scope', 'full') if exported else 'full',
-                group_id=media.get('group_id') if exported else None,
-                segment_id=media.get('segment_id') if exported else None,
-                speed=media.get('speed', 1) if exported else 1,
-                summary=False, annotations=False, analysis_right=True) if not data_only else None
+            plan = self.export_plan(job, result, media) if exported and not data_only else (
+                make_plan(result, speed=1, analysis_right=True) if not data_only else None)
             mapping = ({'scope':plan['scope'], 'speed':plan['speed'],
                 'source_start_seconds':plan['source_start_frame']/plan['fps'],
                 'source_stop_seconds':plan['source_stop_frame']/plan['fps'],
+                'show_skeleton':plan['show_skeleton'], 'show_human':plan['show_human'], 'show_diagram':plan['show_diagram'],
                 'formula':'analysis_time_seconds = source_start_seconds + replay_time_seconds * speed'}
                 if plan else None)
-            try:
-                source_path = self.source(job)
-            except (HTTPException, ValueError):
-                source_path = None
             result = deepcopy(result)
+            result['trajectory_start_seconds'] = job.get('trajectory_start_seconds')
             result['center_of_mass_trajectory'] = center_of_mass_trajectory(result)
         from .replay_export import build_bundle
         return build_bundle(result, mapping=mapping, video_path=None if data_only else video_path,
-                            source_path=None if data_only else source_path, vision=vision)
+                            source_path=None, vision=None)
+
+    def set_trajectory_start(self, job_id, owner, payload):
+        with self.store._lock:
+            job = self.store.get(job_id, owner, private=True)
+            self.source(job)
+            if not (job.get('skeleton_only') or job['result'].get('skeleton_only')):
+                raise HTTPException(409, '有岩点的复盘沿用岩点起点')
+            if any((job.get(key) or {}).get('status') in ACTIVE for key in ('action_task', 'action_export')):
+                raise HTTPException(409, '请等待当前处理完成后再调整起点')
+            duration = (job['result'].get('video') or {}).get('duration_seconds', 0)
+            start = payload.start_seconds
+            if start is not None and start >= duration:
+                raise HTTPException(422, '请选择视频结束之前的起点')
+            changes = {'trajectory_start_seconds': start, 'action_export_media': None}
+            record = job.get('action_result') or {}
+            if self.valid(job, record):
+                updated = deepcopy(record)
+                updated['id'] = uuid.uuid4().hex
+                updated['result']['trajectory_start_seconds'] = start
+                updated['result']['skeleton_only'] = True
+                updated['result'] = enrich_torso_trajectory(updated['result'])
+                changes['action_result'] = updated
+                changes['action_result_history'] = [*job.get('action_result_history', []), record]
+            self.store.update(job_id, **changes)
+        return self.get(job_id, owner)
 
     def wait_idle(self, job_id, timeout=2):
         with self.condition:
@@ -819,6 +970,15 @@ def action_router(manager):
     def get(job_id: str, request: Request):
         return manager.get(job_id, owner(request))
 
+    @router.post('/jobs/{job_id}/actions/background', status_code=202)
+    def prepare_background(job_id: str, request: Request):
+        return manager.prepare_background(job_id, owner(request))
+
+    @router.get('/jobs/{job_id}/actions/background')
+    def background(job_id: str, version: str, request: Request):
+        return FileResponse(manager.background_file(job_id, owner(request), version), media_type='image/png',
+                            headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})
+
     @router.post("/jobs/{job_id}/actions", status_code=202)
     def create(job_id: str, payload: ActionCreate, request: Request):
         return manager.enqueue(job_id, owner(request), "action_task", payload)
@@ -826,6 +986,10 @@ def action_router(manager):
     @router.post("/jobs/{job_id}/actions/cancel")
     def cancel(job_id: str, request: Request):
         return manager.cancel(job_id, owner(request), "action_task")
+
+    @router.put('/jobs/{job_id}/actions/trajectory-start')
+    def trajectory_start(job_id: str, payload: TrajectoryStart, request: Request):
+        return manager.set_trajectory_start(job_id, owner(request), payload)
 
     @router.post("/jobs/{job_id}/actions/review")
     def review(job_id: str, payload: ActionRevision, request: Request):
@@ -850,8 +1014,8 @@ def action_router(manager):
                             headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
     @router.get("/jobs/{job_id}/actions/package")
-    def package(job_id: str, version: str, request: Request, exported: bool = False, data_only: bool = False):
-        stream = manager.export_package(job_id, owner(request), version, exported, data_only)
+    def package(job_id: str, version: str, request: Request, exported: bool = False, data_only: bool = False, export_id: str | None = None):
+        stream = manager.export_package(job_id, owner(request), version, exported, data_only, export_id)
         def chunks():
             try:
                 while chunk := stream.read(1024 * 1024):

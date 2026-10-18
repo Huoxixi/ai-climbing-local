@@ -6,6 +6,7 @@
     <button type="button" class="storage-button" :disabled="busy || !status" @click="chooseFolder">{{ busy ? '正在选择…' : '选择文件夹' }}</button>
     <p v-if="status?.pending_data_directory">新位置：{{ status.pending_data_directory }}。重开 App 后自动复制已有资料，原文件保留。</p>
     <p v-if="notice" role="status">{{ notice }}</p>
+    <p v-if="status?.update_label" class="app-update">{{ status.update_label }}</p>
   </section>
 </template>
 <script setup>
@@ -38,4 +39,5 @@ h2 { margin: 0 0 8px; }
 p { margin: 0; line-height: 1.6; overflow-wrap: anywhere; color: var(--ui-ink-muted); }
 .storage-button { margin: 12px 0; padding: 10px 18px; border: 1px solid var(--ui-border, #d8d8d8); border-radius: 10px; background: var(--ui-surface, #fff); color: inherit; font: inherit; cursor: pointer; }
 .storage-button:disabled { opacity: .6; cursor: default; }
+.app-update { margin-top: 16px; font-size: 12px; }
 </style>

@@ -2,6 +2,7 @@
 from copy import deepcopy
 import numpy as np
 from .replay_action_trajectory import prepare_tracks, analyze_event, LIMBS, LIMB_NAMES
+from .replay_observation_validity import joint_mask
 
 VERSION = 'action-evidence-features-v1'
 TECHNIQUE_PROTOCOL = {
@@ -23,9 +24,11 @@ def raw_angles(samples, video, start, end, chain):
         if not s.get('observed') or not start <= s.get('time_seconds', -1) <= end:
             continue
         try:
-            points = np.asarray(s['kpts_xy'], float) * [video['width'], video['height']]
+            source = np.asarray(s['kpts_xy'], float)
+            points = source * [video['width'], video['height']]
             scores = np.asarray(s['kpts_score'])
-            if not all(scores[i] >= .5 for i in chain) or not np.isfinite(points[list(chain)]).all():
+            valid=joint_mask(source,source,scores,s.get('joint_eligibility'))
+            if not all(valid[i] for i in chain) or not np.isfinite(points[list(chain)]).all():
                 continue
             a, b, c = points[list(chain)]
             u, v = a-b, c-b

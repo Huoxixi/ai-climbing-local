@@ -71,7 +71,13 @@ def create_app(paths, token, origin, *, backend=None, activate=None, probe_media
         from core.replay_pose_rtmw import model_status
         configured = credentials.load(paths.config)
         from desktop.storage import read_settings
+        update_label = None
+        try:
+            update_label = json.loads((paths.install / 'local-update.json').read_text('utf-8')).get('update_label')
+        except (OSError, ValueError):
+            pass
         return {"desktop": True, "version": VERSION, "data_directory": str(paths.data),
+                "update_label": update_label,
                 "pending_data_directory": read_settings(paths).get('pending_directory'),
                 "pose_configured": model_status(paths.install / "backend/model_assets/rtmw-l-384x288")["available"],
                 "pose_provider": "local-rtmw", "pose_requires_credentials": False,

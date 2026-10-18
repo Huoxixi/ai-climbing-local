@@ -15,15 +15,17 @@ import urllib.request
 import zipfile
 import uuid
 
-VERSION = '0.1.17-local.20261010'
+VERSION = '0.1.18-local.20261018'
 OWNER = 'ClimbingAssistantSetup'
 # Rounded above the measured peak including the extracted setup payload. GiB,
 # matching the values Windows commonly labels GB; see docs/VALIDATION.md.
-INSTALL_PEAK_BYTES = int(2.5 * 1024**3)
+INSTALL_PEAK_BYTES = int(3.0 * 1024**3)
 HOLD_URL = ('https://www.kaggle.com/api/v1/datasets/download/tomasslama/'
             'indoor-climbing-gym-hold-segmentation/model%2Fmodel_final.pth?datasetVersionNumber=4')
 HOLD_SHA = '995960a74819e21bd66d7be56ae6e1c8124ec0a06fece4fae13812887d86ebea'
 HOLD_ARCHIVE_SHA = '85a80cd02119d154b1e27f047d327beebfaffe7f99e4d24a117f11040d79aedf'
+MOBILESAM_URL = 'https://raw.githubusercontent.com/ChaoningZhang/MobileSAM/master/weights/mobile_sam.pt'
+MOBILESAM_SHA = '6dbb90523a35330fedd7f1d3dfc66f995213d81b29a5ca8108dbcdd4e37d6c2f'
 WEBVIEW_URL = 'https://go.microsoft.com/fwlink/p/?LinkId=2124703'
 
 
@@ -66,7 +68,7 @@ def download(url, target, digest=None, report=None, attempts=3):
     for attempt in range(attempts):
         try:
             offset = partial.stat().st_size if partial.exists() else 0
-            headers = {'User-Agent': 'ClimbingAssistantSetup/0.1.17', 'Accept-Encoding': 'identity'}
+            headers = {'User-Agent': 'ClimbingAssistantSetup/0.1.18', 'Accept-Encoding': 'identity'}
             if offset:
                 headers['Range'] = f'bytes={offset}-'
             with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=60) as response:
@@ -114,6 +116,15 @@ def clean_environment():
     for key in list(env):
         if key.startswith(('PYTHON', 'PIP_', 'VIRTUAL_ENV', 'OPENAI_', 'DASHSCOPE_')):
             env.pop(key, None)
+    # urllib uses the Windows system proxy; pip's HTTP client does not read the
+    # Windows registry. Give both download paths the same existing user route,
+    # without changing machine settings or logging proxy credentials.
+    for scheme, proxy in urllib.request.getproxies().items():
+        if scheme not in {'http', 'https', 'no'} or not proxy:
+            continue
+        name = 'NO_PROXY' if scheme == 'no' else scheme.upper() + '_PROXY'
+        if not any(key.casefold() == name.casefold() for key in env):
+            env[name] = proxy
     env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PIP_DISABLE_PIP_VERSION_CHECK='1')
     return env
 
@@ -183,7 +194,7 @@ def clean_download_cache(cache):
         directory = cache / name
         if directory.exists() and directory.resolve().is_relative_to(cache) and not directory.is_symlink():
             shutil.rmtree(directory,ignore_errors=True)
-    for name in ('holds-v4.zip','rtmw-l-384x288.zip','yolox-s.zip','MicrosoftEdgeWebview2Setup.exe'):
+    for name in ('holds-v4.zip','mobile_sam.pt','rtmw-l-384x288.zip','yolox-s.zip','MicrosoftEdgeWebview2Setup.exe'):
         path = cache / name
         if path.is_file() and path.resolve().is_relative_to(cache):
             path.unlink(missing_ok=True)
@@ -258,7 +269,7 @@ def rollback(base, cache, payload=None):
 
 
 def remaining_space(payload, staging, cache):
-    """Account for this version's prepared files so retries don't need 2.5 GiB again."""
+    """Account for this version's prepared files so retries don't need 3.0 GiB again."""
     def size(directory):
         if not directory.is_dir():
             return 0
@@ -267,7 +278,7 @@ def remaining_space(payload, staging, cache):
     prepared = size(payload) + min(size(staging), int(1.6 * 1024**3))
     # Only named reusable downloads, never corrupt/unknown files or user data.
     reusable = size(cache / 'packages') + size(cache / 'torch-runtime')
-    digests = {'holds-v4.zip':HOLD_ARCHIVE_SHA}
+    digests = {'holds-v4.zip':HOLD_ARCHIVE_SHA,'mobile_sam.pt':MOBILESAM_SHA}
     from backend.scripts.install_replay_rtmw import ASSETS
     digests.update({archive:digest for _,archive,_,digest in ASSETS})
     for name,digest in digests.items():
@@ -310,7 +321,7 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
             clean_download_cache(cache)
             event(100, '已经安装完成', '可从桌面打开「攀岩助手（公开版）」。', done=True, app=str(target / 'ClimbingAssistant.exe'))
             return target
-        event(3, '检查电脑和安装资源', '首次需要联网 · 安装约需 2.5 GB，完成后约 1.6 GB。')
+        event(3, '检查电脑和安装资源', '首次需要联网 · 安装约需 3.0 GB，完成后约 1.6 GB。')
         if sys.maxsize < 2**32 or sys.version_info[:2] != (3, 12):
             raise InstallError('此安装包适用于 Windows 10/11 64 位系统。')
         required = remaining_space(payload, staging, cache)
@@ -361,6 +372,13 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
                  '-c', str(staging / 'installer/dependencies-win.txt'),
                  '-r', str(staging / 'backend/requirements-local.txt'), '-r', str(staging / 'backend/requirements-holds.txt')],
                 staging, log, '运行组件安装失败。请检查网络、磁盘空间后重试；若网络限制访问 PyPI 或 PyTorch，请更换可访问的网络。')
+        # MobileSAM uses only timm's local PyTorch layers, matching the verified
+        # 2026-10-17 app. Hub/download features are disabled, so do not install
+        # unrelated model-hub dependencies or let them replace the tested Torch.
+        command([str(python), '-m', 'pip', '--isolated', 'install', '--no-deps', '--only-binary=:all:',
+                 '--disable-pip-version-check', '--cache-dir', str(env_cache),
+                 '--retries', '3', '--timeout', '60', 'timm==0.9.16'], staging, log,
+                '岩点补充分割组件安装失败。请检查网络后重试。')
         event(50, '准备岩点识别模型（3/5）', '正在下载岩点识别模型。')
         def hold_progress(received, total):
             fraction = received / total if total else 0
@@ -382,6 +400,10 @@ def install(payload, base, cache, make_shortcuts=True, webview=True):
                 archive.replace(archive.with_suffix('.zip.invalid'))
                 raise InstallError('岩点模型校验失败，请点击重试重新下载。')
             partial.replace(model)
+        event(71, '准备岩点识别模型（3/5）', '正在准备补充分割模型。')
+        download(MOBILESAM_URL, staging / 'models/mobile_sam.pt', MOBILESAM_SHA,
+                 lambda received,total: event(71, '准备岩点识别模型（3/5）',
+                     f'已下载 {received/1024**2:.0f} MB' + (f' / {total/1024**2:.0f} MB' if total else '')))
         event(72, '准备骨架识别模型（4/5）', '正在下载并校验骨架模型。')
         from backend.scripts.install_replay_rtmw import ASSETS
         for index, (name, archive_name, url, digest) in enumerate(ASSETS):
@@ -418,7 +440,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--payload', type=Path, required=True)
     parser.add_argument('--base', type=Path, default=Path(os.environ['LOCALAPPDATA']) / 'Programs/ClimbingAssistant')
-    parser.add_argument('--cache', type=Path, default=Path(os.environ['LOCALAPPDATA']) / 'ClimbingSetup' / '0.1.17')
+    parser.add_argument('--cache', type=Path, default=Path(os.environ['LOCALAPPDATA']) / 'ClimbingSetup' / '0.1.18')
     parser.add_argument('--no-shortcuts', action='store_true')
     parser.add_argument('--skip-webview', action='store_true', help='Developer verification only')
     parser.add_argument('--gate', help='Native process-job start gate')

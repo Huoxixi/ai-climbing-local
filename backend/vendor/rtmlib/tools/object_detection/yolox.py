@@ -70,6 +70,12 @@ class YOLOX(BaseTool):
         results = self.postprocess(outputs, ratio)
         return results
 
+    def detect_with_scores(self, image: np.ndarray, *, score_thr=None):
+        """Return native boxes and scores without changing instance thresholds."""
+        prepared, ratio = self.preprocess(image)
+        return self.postprocess(self.inference(prepared)[0], ratio,
+                                score_thr=score_thr, return_scores=True)
+
     def preprocess(self, img: np.ndarray):
         """Do preprocessing for YOLOX model inference.
 
@@ -110,6 +116,7 @@ class YOLOX(BaseTool):
         self,
         outputs: List[np.ndarray],
         ratio: float = 1.,
+        *, score_thr=None, return_scores=False,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Do postprocessing for YOLOX model inference.
 
@@ -124,6 +131,8 @@ class YOLOX(BaseTool):
             - NOT returned: final_scores (np.ndarray): Final scores.
         """
 
+        outputs = np.array(outputs, copy=True)
+        threshold = self.score_thr if score_thr is None else float(score_thr)
         if outputs.shape[-1] == 4 or outputs.shape[-1] > 5:
             # onnx without nms module
 
@@ -159,24 +168,37 @@ class YOLOX(BaseTool):
             dets, keep = multiclass_nms(boxes_xyxy,
                                         scores,
                                         nms_thr=self.nms_thr,
-                                        score_thr=self.score_thr)
+                                        score_thr=threshold)
             if dets is not None:
                 # `multiclass_nms` already filters by `self.score_thr`, so
                 # no extra score filtering is needed here.
                 final_boxes = dets[:, :4]
                 final_cls_inds = dets[:, 5].astype(int)
+                final_scores = dets[:, 4]
             else:
                 final_boxes, final_cls_inds = np.array([]), np.array([])
+                final_scores = np.array([])
 
         elif outputs.shape[-1] == 5:
             # onnx contains nms module
+            if self.det_mode == 'multiclass':
+                raise NotImplementedError('Packed box/score output has no class IDs')
 
             pack_dets = (outputs[0, :, :4], outputs[0, :, 4])
             final_boxes, final_scores = pack_dets
             final_boxes /= ratio
-            isscore = final_scores > 0.3
-            isbbox = [i for i in isscore]
-            final_boxes = final_boxes[isbbox]
+            keep = np.isfinite(final_scores) & (final_scores > threshold)
+            keep &= np.isfinite(final_boxes).all(axis=1)
+            keep &= (final_boxes[:, 2:] > final_boxes[:, :2]).all(axis=1)
+            final_boxes, final_scores = final_boxes[keep], final_scores[keep]
+            final_cls_inds = np.zeros(len(final_boxes), dtype=int)
+        else:
+            raise ValueError(f'Unsupported detector output shape: {outputs.shape}')
+
+        if return_scores:
+            if self.det_mode != 'human':
+                raise ValueError('Scored replay detections require human mode')
+            return np.asarray(final_boxes).reshape(-1, 4), np.asarray(final_scores)
 
         if self.det_mode == 'multiclass':
             return final_boxes, final_cls_inds

@@ -3,6 +3,8 @@
     <div ref="replayView" class="replay-view">
     <div class="unified-stage" :class="{ locating: seekingFeedback }" :aria-busy="seekingFeedback">
       <ReplayVisualStage ref="visualStage" :src="mediaUrl" :frame="replayFrame" :holds="job.result?.holds || []" :contacts="visualization?.contacts || job.result?.attempt?.contacts || []" :summary="false" :original-source="sourceAvailable" :visualization="visualization"
+        :selection="sourceAvailable ? pictureSelection : null" :background-url="backgroundUrl" :background-info="state?.background"
+        @background-ready="backgroundLoaded=true" @background-error="backgroundLoaded=false; error='无人背景无法载入，请重新载入记录。'"
         @timeupdate="tick" @seeking="onSeeking" @seeked="onSeeked" @ended="onEnded" @loadedmetadata="loaded"
         @play="onPlay" @pause="stopFrames" @fullscreen="fullscreen" @error="error = '视频无法播放，请重新载入记录。'">
         <template #tools>
@@ -14,6 +16,7 @@
         </template>
       </ReplayVisualStage>
     </div>
+    <ReplayPictureChoices v-if="canChangePictures" v-model="pictureSelection" :background-ready="backgroundReady" :background-message="backgroundMessage" />
     <div class="replay-controls">
       <div v-if="selected" class="segment-controls">
         <button type="button" :disabled="playbackIndex <= 0" @click="step(-1)">上一段</button>
@@ -27,22 +30,23 @@
 
     </div>
     </div>
-    <p v-if="sourceAvailable" class="range-label">白点：估算重心 · 轨迹：重心移动路线</p>
+    <div v-if="sourceAvailable && skeletonOnly && pictureSelection.show_diagram" class="trajectory-start-control">
+      <p v-if="!Number.isFinite(trajectoryWindow?.start_seconds)">尚未确定攀爬起点。请将视频定位到开始攀爬的位置，点击“从这里开始”。</p>
+      <p v-else>重心路线从 {{ clock(trajectoryWindow.start_seconds) }} 开始{{ trajectoryWindow.status === 'user_confirmed' ? '（已手动定位）' : '（自动定位，可调整）' }}。</p>
+      <button type="button" :disabled="submitting || busy || exportBusy || !video || currentTime >= duration" @click="markTrajectoryStart">从这里开始 · {{ clock(currentTime) }}</button>
+      <button v-if="trajectoryWindow?.status === 'user_confirmed'" type="button" :disabled="submitting || busy || exportBusy" @click="resetTrajectoryStart">恢复自动判断</button>
+    </div>
+    <p v-if="sourceAvailable && pictureSelection.show_diagram" class="range-label">白点：估算重心 · 轨迹：重心移动路线</p>
     <WorkspaceSheet v-if="exportOpen" title="导出复盘" @close="exportOpen=false">
-      <fieldset class="export-content">
-        <legend>导出内容</legend>
-        <label><input v-model="exportContent" type="radio" value="video" name="replay-export-content" />复盘视频</label>
-        <label><input v-model="exportContent" type="radio" value="package" name="replay-export-content" :disabled="!state?.result_version && !canPrepareExport" />视频＋全部资料</label>
-      </fieldset>
       <template v-if="state?.result_version">
-        <label>范围 <select v-model="exportScope" aria-label="导出范围"><option value="full">完整复盘</option><option value="group" :disabled="!selected || (selectedIndex < 0 && !selected.segment_id)">当前动作</option></select></label>
-        <label>速度 <select v-model.number="exportSpeed" aria-label="导出速度"><option :value=".75">0.75×</option><option :value=".5">0.5×</option><option :value="1">1×</option></select></label>
-        <p>{{ exportScope === 'full' ? `0:00–${clock(duration)}` : `${clock(selected?.start_seconds)}–${clock(selected?.end_seconds)} · 仅当前动作` }} · {{ exportSpeed }}× · 视频保留基础画面，动作文字和基础数据仅在页面展示。</p>
-        <button type="button" :disabled="exportBusy || submitting || (exportScope === 'group' && selectedIndex < 0 && !selected?.segment_id)" @click="exportVideo">{{ exportBusy ? '正在导出…' : '导出文件' }}</button>
+        <ReplayPictureChoices v-model="exportSelection" include-data :background-ready="backgroundReady" :background-message="backgroundMessage" :disabled="exportBusy || submitting" />
+        <label v-if="hasExportPictures">范围 <select v-model="exportScope" aria-label="导出范围" :disabled="exportBusy || submitting"><option value="full">完整复盘</option><option value="group" :disabled="!selected || (selectedIndex < 0 && !selected.segment_id)">当前动作</option></select></label>
+        <label v-if="hasExportPictures">速度 <select v-model.number="exportSpeed" aria-label="导出速度" :disabled="exportBusy || submitting"><option :value=".75">0.75×</option><option :value=".5">0.5×</option><option :value="1">1×</option></select></label>
+        <p v-if="hasExportPictures">{{ exportScope === 'full' ? `0:00–${clock(duration)}` : `${clock(selected?.start_seconds)}–${clock(selected?.end_seconds)} · 仅当前动作` }} · {{ exportSpeed }}× · 导出所选画面，无声音、评语字幕或统计浮层。</p>
+        <button type="button" :disabled="exportBusy || submitting || !validExportSelection || (hasExportPictures && exportScope === 'group' && selectedIndex < 0 && !selected?.segment_id)" @click="exportVideo">{{ exportBusy ? '正在导出…' : '导出文件' }}</button>
         <button v-if="exportBusy" type="button" @click="cancelExport">停止导出</button>
-        <a v-if="state?.export_media && exportContent === 'video'" :href="downloadUrl" download>下载复盘视频 · {{ state.export_media.scope === 'full' ? '完整复盘' : '动作片段' }} · {{ state.export_media.speed }}×</a>
-        <a v-else-if="state?.export_media" :href="packageUrl" download="climb-replay-package.zip">下载视频＋全部资料</a>
-        <p v-if="exportContent === 'package'">资料包包含复盘视频、可用原片、全部本地计算数据（时间、身体角度、估算重心等）、提示词与约束及证据画面。解压后可查看完整资料；原片时间与慢放、片段时间的换算见包内说明。</p>
+        <a v-if="matchingExport" :href="completedDownloadUrl" :download="state.export_media.include_data ? 'climb-replay-package.zip' : 'climb-replay.mp4'">{{ state.export_media.include_data ? '下载资料包' : '下载复盘视频' }}</a>
+        <p v-if="exportSelection.include_data">资料仅含运动数据（时间、身体角度、估算重心等）、提示词与时间说明，不含原片、截图或声音。仅选资料时无需生成视频。</p>
       </template>
       <template v-else>
         <p v-if="busy || submitting" role="status">正在本地准备导出，完成后可选择范围和速度。不会重新识别骨架或新增姿态费用。</p>
@@ -69,8 +73,9 @@ import { segmentDecision } from '../services/actionPlayback.js'
 import { metricValue } from '../services/replayPresentation.js'
 import ReplayVisualStage from './ReplayVisualStage.vue'
 import { replayFrameGeometry } from '../services/replayFrameGeometry.js'
-import { analysisFrame, registeredDisplayPoses } from '../services/replayAnalysisView.js'
+import { analysisFrame, currentVisualization } from '../services/replayAnalysisView.js'
 import WorkspaceSheet from './ui/WorkspaceSheet.vue'
+import ReplayPictureChoices from './ReplayPictureChoices.vue'
 const replayView=ref(null), statisticsOpen=ref(false)
 function fullscreen() { if(document.fullscreenElement) document.exitFullscreen?.(); else replayView.value?.requestFullscreen?.() }
 const props = defineProps({ job: { type: Object, required: true }, legacyUrl: { type: String, default: '' }, fallbackActions: { type: Array, default: () => [] }, analysisAuthorized: {type:Boolean,default:false} })
@@ -78,13 +83,23 @@ const visualStage = ref(null), video = computed(() => visualStage.value?.video)
 const state = ref(null), selected = ref(null), speed = ref(.75), loop = ref(false)
 const error = ref(''), submitting = ref(false), cloudConsent = ref(false)
 const exportOpen = ref(false), exportScope = ref('full'), exportSpeed = ref(.75)
-const exportContent = ref('video')
+const defaultPictures=()=>({show_skeleton:false,show_human:true,show_diagram:true})
+const pictureSelection=ref(defaultPictures()),exportSelection=ref({...defaultPictures(),include_data:false})
+const backgroundLoaded=ref(false)
+const canChangePictures=computed(()=>sourceAvailable.value && Boolean(state.value?.result_version) && props.job.status==='succeeded')
+const backgroundReady=computed(()=>state.value?.background?.status==='ready' && backgroundLoaded.value)
+const backgroundMessage=computed(()=>state.value?.background?.status==='ready' ? (backgroundLoaded.value?'':'正在载入无人背景…') : state.value?.background?.message || '无人背景尚不可用。')
+const backgroundUrl=computed(()=>state.value?.background?.status==='ready' ? service.replayBackgroundUrl(props.job.id,state.value.background.binding) : '')
+const hasExportPictures=computed(()=>exportSelection.value.show_skeleton || exportSelection.value.show_human || exportSelection.value.show_diagram)
+const validExportSelection=computed(()=>(hasExportPictures.value || exportSelection.value.include_data) && !(exportSelection.value.show_skeleton && !exportSelection.value.show_human && !backgroundReady.value))
 const currentTime = ref(0), seekingFeedback = ref(false)
-const replayFrame = computed(() => sourceAvailable.value ? analysisFrame(props.job.result?.video || visualization.value?.video)
+const replayFrame = computed(() => sourceAvailable.value ? analysisFrame(props.job.result?.video || visualization.value?.video,pictureSelection.value)
   : props.legacyUrl.includes('/comparison') || props.job.result?.overlay?.layout === 'split_analysis_right_v11' ? null : replayFrameGeometry(props.job.result))
-const visualization = computed(() => state.value?.result?.replay_visualization || {pose_samples:registeredDisplayPoses(props.job.result),center_of_mass_trajectory:state.value?.result?.center_of_mass_trajectory})
+const visualization = computed(() => currentVisualization(state.value?.result?.replay_visualization,props.job.result,state.value?.result?.center_of_mass_trajectory))
+const skeletonOnly = computed(() => Boolean(props.job.skeleton_only || props.job.result?.skeleton_only || state.value?.result?.skeleton_only))
+const trajectoryWindow = computed(() => visualization.value?.center_of_mass_trajectory?.climbing_window)
 let timer, seekTimer, frameCallback, generation = 0, internalSeek = false, autoStarted = false
-let pendingDownload = false, previousExportId = null
+let pendingDownload = false, backgroundRequested = false
 const sourceAvailable = computed(() => props.job.media?.source_video?.status === 'available')
 const canPrepareExport = computed(() => sourceAvailable.value && props.job.status === 'succeeded')
 const canExport = computed(() => Boolean(state.value?.result_version || canPrepareExport.value || props.legacyUrl))
@@ -113,7 +128,15 @@ const displayCost = computed(() => state.value?.vision_cost || state.value?.cost
 const mediaUrl = computed(() => sourceAvailable.value ? service.mediaUrl(props.job.id, 'source-video')
   : state.value?.media_ready ? service.actionMediaUrl(props.job.id, state.value.result_version) : props.legacyUrl)
 const downloadUrl = computed(() => service.actionMediaUrl(props.job.id, state.value?.export_media?.id, true, true))
-const packageUrl = computed(() => service.actionPackageUrl(props.job.id, state.value?.result_version, Boolean(state.value?.export_media)))
+const mediaHasPictures=media=>media && (media.show_skeleton || media.show_human || media.show_diagram)
+const completedDownloadUrl = computed(() => state.value?.export_media?.include_data
+  ? service.actionPackageUrl(props.job.id,state.value.result_version,true,!mediaHasPictures(state.value.export_media),state.value.export_media.id) : downloadUrl.value)
+const matchingExport=computed(()=>{
+  const media=state.value?.export_media
+  return media && ['show_skeleton','show_human','show_diagram','include_data'].every(k=>media[k]===exportSelection.value[k])
+    && (!hasExportPictures.value || (media.speed===exportSpeed.value && media.scope===exportScope.value
+    && (exportScope.value!=='group' || media.group_id===(selected.value?.group_id || selected.value?.id))))
+})
 const savedReplayDownloadUrl = computed(() => {
   if (!props.legacyUrl) return ''
   const url = new URL(props.legacyUrl, window.location.href)
@@ -176,10 +199,16 @@ async function refresh(id, token) {
     if (token !== generation) return
     state.value = data
     clearTimeout(timer)
-    if (busy.value || exportBusy.value) timer = setTimeout(() => refresh(id, token), 1000)
+    if (busy.value || exportBusy.value || data.background?.status==='running') timer = setTimeout(() => refresh(id, token), 1000)
     else if (!autoStarted && data.task?.status !== 'failed' && sourceAvailable.value) {
       autoStarted = true
       if (!data.result_version) await generate(false)
+    }
+    if(data.result_version && data.background?.status==='not_started' && !backgroundRequested && sourceAvailable.value){
+      backgroundRequested=true
+      service.prepareReplayBackground(id).then(()=>{if(token===generation)refresh(id,token)}).catch(()=>{
+        if(token===generation && state.value)state.value.background={status:'unavailable',message:'无人背景检查未完成，请重新载入记录后重试。'}
+      })
     }
   } catch (e) { if (token === generation) error.value = e.response?.data?.detail || '无法读取复盘状态，请重新载入记录。' }
 }
@@ -191,30 +220,46 @@ async function perform(fn) {
   finally { if (token === generation) submitting.value = false }
 }
 function generate() { return perform(id => service.generateActions(id, { cloud_consent: false })) }
+function markTrajectoryStart() {
+  video.value?.pause()
+  const time = video.value?.currentTime ?? currentTime.value
+  return perform(id => service.setTrajectoryStart(id, time))
+}
+function resetTrajectoryStart() { return perform(id => service.setTrajectoryStart(id, null)) }
 function openExport() {
   exportOpen.value = !exportOpen.value
+  if(exportOpen.value)exportSelection.value={...pictureSelection.value,include_data:false}
   if (exportOpen.value && !state.value?.result_version && canPrepareExport.value && !busy.value && !submitting.value) generate(false)
 }
 function cancel() { return perform(id => service.cancelActions(id)) }
 function cancelExport() { pendingDownload=false; return perform(id => service.cancelActionExport(id)) }
 async function exportVideo() {
-  previousExportId=state.value?.export_media?.id; pendingDownload=true
-  await perform(id => service.exportActions(id, { result_version: state.value.result_version, scope: exportScope.value, group_id: exportScope.value === 'group' ? selected.value?.segment_id ? selected.value.group_id || null : selected.value?.id : null, ...(exportScope.value === 'group' && selected.value?.segment_id ? {segment_id:selected.value.segment_id} : {}), speed: exportSpeed.value }))
+  if(!validExportSelection.value)return
+  pendingDownload=true
+  const scope=hasExportPictures.value?exportScope.value:'full'
+  await perform(id => service.exportActions(id, { result_version: state.value.result_version, ...exportSelection.value, scope, group_id: scope === 'group' ? selected.value?.segment_id ? selected.value.group_id || null : selected.value?.id : null, ...(scope === 'group' && selected.value?.segment_id ? {segment_id:selected.value.segment_id} : {}), speed: hasExportPictures.value?exportSpeed.value:1 }))
   if(error.value)pendingDownload=false
+  else finishDownload()
 }
-watch(()=>state.value?.export_media?.id,id=>{
-  if(!pendingDownload || !id || id===previousExportId)return
+function finishDownload(){
+  if(!pendingDownload || !matchingExport.value || state.value?.export?.status!=='succeeded')return
   pendingDownload=false
-  const link=document.createElement('a');link.href=exportContent.value==='package'?packageUrl.value:downloadUrl.value
-  link.download=exportContent.value==='package'?'climb-replay-package.zip':'climb-replay.mp4'
+  const link=document.createElement('a');link.href=completedDownloadUrl.value
+  link.download=state.value.export_media.include_data?'climb-replay-package.zip':'climb-replay.mp4'
   document.body.appendChild(link);link.click();link.remove()
+}
+watch(()=>[state.value?.export_media?.id,state.value?.export?.status],()=>{
+  if(state.value?.export?.status==='failed')pendingDownload=false
+  else finishDownload()
 })
 watch(() => props.job.id, id => {
   autoStarted = false
   pendingDownload = false
+  backgroundRequested=false; backgroundLoaded.value=false
+  pictureSelection.value=defaultPictures();exportSelection.value={...defaultPictures(),include_data:false}
   generation++; clearTimeout(timer); stopFrames(); state.value = null; selected.value = null
   speed.value = .75; exportSpeed.value = .75; loop.value = false; cloudConsent.value = false; exportOpen.value = false; error.value = ''; submitting.value = false
-  exportContent.value = 'video'; exportScope.value = 'full'
+  exportScope.value = 'full'
   currentTime.value = 0; seekingFeedback.value = false; internalSeek = false; clearTimeout(seekTimer)
   refresh(id, generation)
 }, { immediate: true })
@@ -284,6 +329,9 @@ input { accent-color: var(--replay-accent); }
 .organize-prompt button { flex-shrink: 0; }
 [role='alert'] { color: var(--ui-danger, #bd4343); }
 .range-label { color: var(--replay-muted); font-variant-numeric: tabular-nums; }
+.trajectory-start-control { padding: 0 24px 12px; font-size: 13px; line-height: 1.6; }
+.trajectory-start-control p { margin: 0 0 8px; }
+.trajectory-start-control button { margin-right: 8px; }
 .export-options { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .export-options p { width: 100%; margin: 0; }
 .export-options a { text-underline-offset: 4px; }

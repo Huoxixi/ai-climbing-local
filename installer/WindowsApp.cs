@@ -13,10 +13,10 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 internal static class WindowsApp {
-    internal const string Version = "0.1.17-local.20261010";
+    internal const string Version = "0.1.18-local.20261018";
     internal static readonly string LocalRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
     internal static readonly string ProgramRoot = Path.Combine(LocalRoot,"Programs","ClimbingAssistant");
-    internal static readonly string Cache = Path.Combine(LocalRoot, "ClimbingSetup", "0.1.17");
+    internal static readonly string Cache = Path.Combine(LocalRoot, "ClimbingSetup", "0.1.18");
     internal static string Quote(string text) { return "\"" + text.Replace("\"", "\\\"") + "\""; }
     [STAThread] static int Main(string[] args) {
         Application.EnableVisualStyles();
@@ -226,7 +226,7 @@ internal sealed class InstallForm : Form {
         var intro=new Label {Text="照片选线 · 视频复盘\n一次安装，之后直接打开使用。",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(70,70,70)};
         step.Text=currentStep;step.Font=new Font(Font.FontFamily,10F,FontStyle.Bold);step.Dock=DockStyle.Fill;
         progress.Dock=DockStyle.Top;progress.Height=px(8);
-        detail.Text="首次需要联网\n安装约需 2.5 GB，完成后约 1.6 GB。";detail.Dock=DockStyle.Fill;
+        detail.Text="首次需要联网\n安装约需 3.0 GB，完成后约 1.6 GB。";detail.Dock=DockStyle.Fill;
         logs.Text="安装说明";logs.AutoSize=true;logs.LinkColor=Color.FromArgb(70,70,70);
         logs.Click+=(s,e)=>{
             if(!attempted) MessageBox.Show(this,"自动准备环境和模型，无需配置 Python。\n失败、停止或取消会清理本次安装文件，保留已有应用和个人资料。\n空间为本机实测并取整；缺少微软窗口组件时需另准备该共享组件。\n下载来源和许可见 GitHub 项目 README。","安装说明");

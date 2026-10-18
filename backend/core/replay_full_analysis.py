@@ -26,6 +26,7 @@ def compact_geometry(result):
             return {k:numeric(v) for k,v in value.items()}
         return value
     video = result.get('video', {})
+    observations=any(s.get('joint_eligibility') is not None for s in result.get('pose_samples',[]))
     data = {'geometry_schema':'climb-vectors-v1',
         'video':{k:video[k] for k in ('width','height','fps','duration_seconds') if k in video},
         'source_duration_seconds':validate_input(result), 'time_basis':'source_video',
@@ -35,7 +36,7 @@ def compact_geometry(result):
             'joint_order':['nose','left_eye','right_eye','left_ear','right_ear','left_shoulder','right_shoulder',
                 'left_elbow','right_elbow','left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle'],
             'connections':[[5,7],[7,9],[6,8],[8,10],[5,6],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]],
-            'missing':'null or observed=false; confidence below 0.5 is unreliable',
+            'missing':'null or observed=false; joint_eligibility is candidate admissibility, raw response is uncalibrated; position and physical contact need image evidence' if observations else 'null or observed=false; confidence below 0.5 is unreliable',
             'center_of_mass':'estimated 2D mass-weighted; no force/contact inference'},
         'pose_columns':['source_frame_id','time_seconds','observed','kpts_xy','kpts_score',
                         'wall_alignment','wall_reference_transform','estimated_center_of_mass_xy'],
@@ -52,6 +53,10 @@ def compact_geometry(result):
         data['pose_samples'].append([s.get('source_frame_id'),s.get('time_seconds'),observed,
             s.get('kpts_xy') if observed else None,s.get('kpts_score') if observed else None,
             s.get('wall_alignment'),s.get('wall_reference_transform'),center_of_mass_point(s)])
+        if observations:
+            data['pose_samples'][-1].append(s.get('joint_eligibility'))
+    if observations:
+        data['pose_columns'].append('joint_eligibility')
     if result.get('skeleton_only'):
         from .replay_skeleton_mode import without_hold_data
         data = without_hold_data(data)
