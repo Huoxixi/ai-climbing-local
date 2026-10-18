@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 import json
-from installer.engine import download, safe_extract, InstallError, install, remaining_space, INSTALL_PEAK_BYTES, begin_transaction, rollback, VERSION
+from installer.engine import download, safe_extract, InstallError, install, remaining_space, INSTALL_PEAK_BYTES, begin_transaction, rollback, VERSION, clean_environment
 
 
 class Response(io.BytesIO):
@@ -20,6 +20,14 @@ class Response(io.BytesIO):
 
 
 class InstallerTests(unittest.TestCase):
+    def test_component_install_respects_system_proxy_without_inheriting_app_credentials(self):
+        with patch.dict('os.environ', {'OPENAI_API_KEY':'test-only-value','PIP_INDEX_URL':'https://unused.invalid','HTTPS_PROXY':'http://explicit.invalid:8080'},clear=True), patch('installer.engine.urllib.request.getproxies',return_value={'http':'http://127.0.0.1:7897','https':'http://127.0.0.1:7897'}):
+            env=clean_environment()
+        self.assertEqual(env['HTTP_PROXY'],'http://127.0.0.1:7897')
+        self.assertEqual(env['HTTPS_PROXY'],'http://explicit.invalid:8080')
+        self.assertNotIn('OPENAI_API_KEY',env)
+        self.assertNotIn('PIP_INDEX_URL',env)
+
     def test_failed_install_removes_environment_models_and_downloads(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);base=root/'Programs';cache=root/'Cache'

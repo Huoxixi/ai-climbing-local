@@ -116,6 +116,15 @@ def clean_environment():
     for key in list(env):
         if key.startswith(('PYTHON', 'PIP_', 'VIRTUAL_ENV', 'OPENAI_', 'DASHSCOPE_')):
             env.pop(key, None)
+    # urllib uses the Windows system proxy; pip's HTTP client does not read the
+    # Windows registry. Give both download paths the same existing user route,
+    # without changing machine settings or logging proxy credentials.
+    for scheme, proxy in urllib.request.getproxies().items():
+        if scheme not in {'http', 'https', 'no'} or not proxy:
+            continue
+        name = 'NO_PROXY' if scheme == 'no' else scheme.upper() + '_PROXY'
+        if not any(key.casefold() == name.casefold() for key in env):
+            env[name] = proxy
     env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PIP_DISABLE_PIP_VERSION_CHECK='1')
     return env
 
