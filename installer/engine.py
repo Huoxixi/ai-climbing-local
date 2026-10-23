@@ -15,7 +15,7 @@ import urllib.request
 import zipfile
 import uuid
 
-VERSION = '0.1.18-local.20261018'
+VERSION = '0.1.19-local.20261023'
 OWNER = 'ClimbingAssistantSetup'
 # Rounded above the measured peak including the extracted setup payload. GiB,
 # matching the values Windows commonly labels GB; see docs/VALIDATION.md.

@@ -1,3 +1,3 @@
 """Isolated Windows desktop runtime. Never imports the development launcher."""
 
-VERSION = "0.1.18-local.20261018"
+VERSION = "0.1.19-local.20261023"
