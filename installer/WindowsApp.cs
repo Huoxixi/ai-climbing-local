@@ -13,7 +13,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 internal static class WindowsApp {
-    internal const string Version = "0.1.18-local.20261018";
+    internal const string Version = "0.1.19-local.20261023";
     internal static readonly string LocalRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
     internal static readonly string ProgramRoot = Path.Combine(LocalRoot,"Programs","ClimbingAssistant");
     internal static readonly string Cache = Path.Combine(LocalRoot, "ClimbingSetup", "0.1.18");
