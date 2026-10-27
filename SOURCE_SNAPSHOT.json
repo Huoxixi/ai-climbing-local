@@ -1,9 +1,10 @@
 {
-  "date": "2026-10-10",
-  "app_version": "0.1.14-replay.20261009",
-  "base_commit": "fea6690e4bf4530166b1a66accbb3c3b3cfd0628",
-  "includes_working_tree_changes": true,
-  "backend_core_modules": 67,
-  "frontend_source_files": 43,
-  "scope": "local boulder app only"
+  "date": "2026-10-27",
+  "app_version": "0.1.20-local.20261027",
+  "accepted_source_commit": "bb4c1b08853878f174534cd426f526633bfb434b",
+  "algorithm_baseline": "0.1.17-local.20261019.2",
+  "accepted_refactor": "round6-20261027",
+  "includes_working_tree_changes": false,
+  "backend_core_modules": 91,
+  "scope": "local boulder app only; public 视频复盘 title retained; no rejected experiments or user data"
 }

@@ -2,11 +2,11 @@
 
 在自己的电脑上整理抱石线路、回看攀爬过程。支持照片选线、视频骨架与基础统计，以及复盘视频和资料导出。
 
-**[下载 Windows 安装包](https://github.com/Huoxixi/climbing-assistant-local/releases/latest)** · Windows 10/11 64 位 · 当前版本 `0.1.19-local.20261023`
+**[下载 Windows 安装包](https://github.com/Huoxixi/climbing-assistant-local/releases/latest)** · Windows 10/11 64 位 · 当前版本 `0.1.20-local.20261027`
 
 ## 安装与开始使用
 
-1. 下载发布页中的 **ClimbingAssistant-Windows-0.1.19-local.20261023.zip**，右键「全部解压」。
+1. 下载发布页中的 **ClimbingAssistant-Windows-0.1.20-local.20261027.zip**，右键「全部解压」。
 2. 双击 **安装攀岩助手.exe**，点击「开始安装」。同目录的 **安装说明.txt** 可随时查看。
 3. 完成后点击「打开攀岩助手」，以后从桌面的「攀岩助手（公开版）」打开。
 
