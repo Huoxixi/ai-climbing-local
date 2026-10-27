@@ -1,6 +1,8 @@
 {
-  "version": "0.1.18-local.20261018",
-  "update_label": "本机已更新：2026.10.18",
+  "version": "0.1.20-local.20261027",
+  "update_label": "本机已更新：2026.10.27",
   "head": "circle-head-display-v2",
-  "background": "empty-scene-wall-reference-v2"
+  "background": "empty-scene-wall-reference-v2",
+  "algorithm_baseline": "0.1.17-local.20261019.2",
+  "source_refactor": "accepted-slim-round6-20261027"
 }
